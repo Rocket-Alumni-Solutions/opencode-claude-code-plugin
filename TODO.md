@@ -92,7 +92,12 @@ Nothing queued here; the working backlog is the vault note
 Questions the maintainer still owes an answer on. Written here the turn they are
 raised, so they survive context compaction; removed when answered, done or dropped.
 
-No pending questions.
+- 2026-09-26: follow-ups the lanes reported, not scheduled: (1) Windows spawns go through
+  `cmd.exe` with no argument quoting (injection with `& | > ^`, broken with spaces or quotes);
+  needs a Windows CI job first, then a resolver and escaper. Do it, or leave it documented?
+  (2) show `permissionPreset` in `/claude-code-doctor` and the startup block (small);
+  (3) the language model's remaining turn state (54 shared identifiers) and routing
+  `doGenerate` through `doGenerateViaStream`, each a deliberate refactor with a live probe.
 
 ## Parked
 
@@ -100,11 +105,6 @@ Nothing parked.
 
 ## In progress
 
-- 2026-09-26: **three lanes dispatched in parallel** (maintainer: "do all of it?"): named
-  permission presets (light), silent-turn detection (light), security hardening (medium).
-  Estimates and the file-ownership split between the lanes are in the vault roadmap, "Cost
-  calibration and weights". Each opens one PR; merging, the live check and the release
-  (0.28.0, since presets add an option) happen here afterwards.
 - 2026-09-23: opencode 2, the checks that were not possible before release. (1) Install
   by npm name (it failed from this Mac because Aikido's age filter hid the new version): `plugins: ["@khalilgharbaoui/opencode-claude-code-plugin@0.26.0"]` failed
   with `NpmInstallFail` right after publishing, because the registry's aggregate
@@ -114,6 +114,11 @@ Nothing parked.
 
 ## Done
 
+- 2026-09-26: **done** (v0.28.0): three parallel implementor lanes, PR #53 read-only
+  permission preset, PR #51 `▌ no reply` note (measured zero silent turns, so no nudge),
+  PR #52 scratch-file hardening (Windows part deferred). 832 tests, live-checked on opencode
+  1.18.32 and 2.0.11. The three lanes all wrote their history under `#g156`; renumbered to
+  g156 to g158 at merge.
 - 2026-09-26: **done**, the three accelerator lanes, each an implementor subagent: PR #47
   (AGENTS.md 182 KB to 53.6 KB, history verbatim in `docs/agents-history.md`, three dropped
   rules restored before merge), PR #49 (language model 5,383 to 4,105 lines, ten modules, no
