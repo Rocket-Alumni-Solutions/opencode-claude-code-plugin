@@ -92,15 +92,10 @@ Nothing queued here; the working backlog is the vault note
 Questions the maintainer still owes an answer on. Written here the turn they are
 raised, so they survive context compaction; removed when answered, done or dropped.
 
-- 2026-09-27: **contributor PR #46 (@acastro2, opened 2026-09-24), unreviewed.** Fixes CLI
-  tool results being emitted under the raw CLI name while their call used the mapped name
-  (`toolCallsById` stored the raw name), so opencode 2.0.16 aborts every turn that uses a
-  Claude-side MCP server ("Tool result name changed"). Measured by the contributor on plugin
-  0.27.1, opencode 2.0.16, Claude Code 2.1.280. Needs review against the split (#49) and the
-  V2 name translation in `src/host-tools.ts`, then merge with credit and a patch release.
 - 2026-09-26: follow-ups the lanes reported, not scheduled: (1) Windows spawns go through
   `cmd.exe` with no argument quoting (injection with `& | > ^`, broken with spaces or quotes);
-  needs a Windows CI job first, then a resolver and escaper. Do it, or leave it documented?
+  needs a Windows CI job first, then a resolver and escaper. 2026-09-27: left documented until a
+  Windows user appears (none has ever filed an issue).
   (2) show `permissionPreset` in `/claude-code-doctor` and the startup block (small);
   (3) the language model's remaining turn state (54 shared identifiers) and routing
   `doGenerate` through `doGenerateViaStream`, each a deliberate refactor with a live probe.
@@ -120,6 +115,11 @@ Nothing parked.
 
 ## Done
 
+- 2026-09-27: **done** (v0.28.1): contributor PR #46 (@acastro2) merged with credit. CLI tool
+  results now carry their call's mapped name, so opencode 2.0.16 no longer aborts turns that
+  use a Claude-side MCP server. Reviewed: the stored name is read only by the result emit, and
+  the opencode 2 translation classifies a result by the name it carries, so call and result
+  now translate alike. Conflict (test list) resolved on the contributor's branch; 834 tests.
 - 2026-09-26: **done** (v0.28.0): three parallel implementor lanes, PR #53 read-only
   permission preset, PR #51 `▌ no reply` note (measured zero silent turns, so no nudge),
   PR #52 scratch-file hardening (Windows part deferred). 832 tests, live-checked on opencode

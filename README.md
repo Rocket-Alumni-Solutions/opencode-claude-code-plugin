@@ -1359,6 +1359,7 @@ This plugin absorbs work from its forks directly, cherry-picked with the origina
 | [@CNQQC](https://github.com/CNQQC) | Cost units corrected to dollars per million tokens (PR #25). | PR #25 |
 | [@willmcginnis](https://github.com/willmcginnis) | The proxy endpoint authentication (PR #28, GHSA-3mxm-w7gf-3c5x). | PR #28 |
 | [@nic-lan](https://github.com/nic-lan) | The issue #29 diagnosis of subagent output lost across the CLI resume boundary, and the fix for unattended output replaying as one text block per delta (PR #35). | #29, PR #35 |
+| [@acastro2](https://github.com/acastro2) (Alexandre Castro) | Found and fixed CLI tool results being emitted under a different name than their call, which made opencode 2 abort every turn that used a Claude-side MCP server (PR #46). | PR #46 |
 | [@JWebCoder](https://github.com/JWebCoder) (joao moura) | Diagnosed that auto-continue never fires on current CLIs (PR #15). | PR #15 |
 
 Commit hashes are on the contributors' forks where the work was cherry-picked; `git log --author` on this repo shows the preserved authorship.

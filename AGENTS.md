@@ -71,6 +71,7 @@ changing, reverting or "simplifying" a rule.
 
 ### Tools and streaming
 
+- **A CLI-executed tool's `tool-result` must carry the same mapped name as its `tool-call`** (`toolCallsById` stores `mappedName`, both set sites): opencode pairs tool parts by name, and opencode 2.0.16 aborts the turn on a mismatch ("Tool result name changed"), which broke every Claude-side MCP server call until PR #46 (@acastro2). `test-mcp-tool-result-name.ts`.
 - `signature_delta` is expected encrypted thinking metadata. Ignore it quietly; do not treat it as an error.
 - `WebSearch` with the default `"claude"` routing must NOT be forwarded as a tool-call part, because opencode has no registry entry and the AI SDK rejects unknown tool names. `mapTool` returns `skip: true` and the sites render a `> **Web search:** …` line; explicit `webSearch: "<tool>"` still forwards. `test-tool-mapping.ts`. (h #g72)
 - `tool-input-delta` parts must only be forwarded when `tool-input-start` was actually emitted, or opencode creates a permanently-pending `⚙ unknown` part. Gate on `started`, but keep accumulating `inputJson` unconditionally: the skip-path text rendering depends on it. (h #g73)
