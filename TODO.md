@@ -100,6 +100,11 @@ Nothing parked.
 
 ## In progress
 
+- 2026-09-26: **three lanes dispatched in parallel** (maintainer: "do all of it?"): named
+  permission presets (light), silent-turn detection (light), security hardening (medium).
+  Estimates and the file-ownership split between the lanes are in the vault roadmap, "Cost
+  calibration and weights". Each opens one PR; merging, the live check and the release
+  (0.28.0, since presets add an option) happen here afterwards.
 - 2026-09-23: opencode 2, the checks that were not possible before release. (1) Install
   by npm name (it failed from this Mac because Aikido's age filter hid the new version): `plugins: ["@khalilgharbaoui/opencode-claude-code-plugin@0.26.0"]` failed
   with `NpmInstallFail` right after publishing, because the registry's aggregate
