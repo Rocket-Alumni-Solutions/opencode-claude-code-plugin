@@ -86,9 +86,9 @@ changing, reverting or "simplifying" a rule.
 
 ### Scratch files on disk
 
-- **The scratch dir is `0700` and a pre-existing symlink, non-directory or foreign-owned path at the pid name is refused** for a fresh `mkdtempSync` one, re-checked every `pluginTmpDir()` call. The system prompt file is `0600` inside it, not loose in the OS tmpdir: it holds the whole forwarded prompt. `test-tmp-dir.ts`, `test-compaction-model.ts`. (h #g156)
-- **`sweepStalePluginTmpDirs` may only remove a pid-named directory that `lstat` says is a real directory, the current user owns, and whose pid is dead** (`EPERM` counts as alive). `cleanupStaleUnscopedInstall` is gated on a version marker under `XDG_STATE_HOME`, so it sweeps opencode's plugin cache once per installed version. `test-cleanup-stale.ts`. (h #g156)
-- **Windows still spawns through `cmd.exe` (`shell: win32`) and that is a known, documented hole**, not an oversight: Node quotes nothing there. Do not "fix" it without a Windows runner to verify the escaper on. (h #g156)
+- **The scratch dir is `0700` and a pre-existing symlink, non-directory or foreign-owned path at the pid name is refused** for a fresh `mkdtempSync` one, re-checked every `pluginTmpDir()` call. The system prompt file is `0600` inside it, not loose in the OS tmpdir: it holds the whole forwarded prompt. `test-tmp-dir.ts`, `test-compaction-model.ts`. (h #g158)
+- **`sweepStalePluginTmpDirs` may only remove a pid-named directory that `lstat` says is a real directory, the current user owns, and whose pid is dead** (`EPERM` counts as alive). `cleanupStaleUnscopedInstall` is gated on a version marker under `XDG_STATE_HOME`, so it sweeps opencode's plugin cache once per installed version. `test-cleanup-stale.ts`. (h #g158)
+- **Windows still spawns through `cmd.exe` (`shell: win32`) and that is a known, documented hole**, not an oversight: Node quotes nothing there. Do not "fix" it without a Windows runner to verify the escaper on. (h #g158)
 
 ### Models, effort and spawn env
 
@@ -125,7 +125,7 @@ changing, reverting or "simplifying" a rule.
 - **Auto-continue never fires on current Claude Code CLI**, because the CLI always emits a `stop_reason` and `shouldAutoContinueIncompleteTurn` treats it as authoritative, so `"smart"` behaves as `off`. Do not delete that guard, and do not delete the keyword heuristic below it: it is the fallback for CLIs that omit `stop_reason`. `test-auto-continue.ts`. (h #g104)
   - The one exception is `isTruncationStopReason` (`max_tokens`, plus the `max_output_tokens` alias), authoritative in the other direction and bounded by the attempt and elapsed rails, because a truncated prose answer dies at the `no-activity` gate.
   - **A compaction turn must never be nudged**: `AUTO_CONTINUE_PROMPT` is the inverse of a `/compact` turn's job and the text would land in the stored summary. `autoContinueEnabledFor(compactionMode, configured)` gates it; add a compaction case to any future change here.
-- **A turn that ends with no text and no tool call gets the `▌ **no reply:**` note and deliberately no nudge**: measured zero silent turns in the whole retained `plugin.log` pair, and a nudge would need a second exception to the `stop_reason` guard. `isSilentTurn`, fired in `completeResult` after the failover return. `test-silent-turn.ts`. (h #g156)
+- **A turn that ends with no text and no tool call gets the `▌ **no reply:**` note and deliberately no nudge**: measured zero silent turns in the whole retained `plugin.log` pair, and a nudge would need a second exception to the `stop_reason` guard. `isSilentTurn`, fired in `completeResult` after the failover return. `test-silent-turn.ts`. (h #g157)
   - Its snapshot is **stream-scoped, never the `SinceContinue` counters**, which reset on every nudge. `compactionMode`, `isError` and `enabled === false` each fail a case on their own; `sawQuestion` is redundant only while `content_block_start` counts `AskUserQuestion` as tool activity, so do not "tidy" it away.
 - **`turnStats` is off by default and must never fire on a compaction turn or a failed one** (summary corruption; the bill belongs with the error). Use the **turn totals** (`msg.usage`) so the line matches `total_cost_usd`, and pass `permission_denials` as **names and ids only**. `test-turn-stats.ts`. (h #g109)
 
