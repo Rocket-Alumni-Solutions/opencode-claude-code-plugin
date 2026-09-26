@@ -100,17 +100,6 @@ Nothing parked.
 
 ## In progress
 
-- 2026-09-26: **accelerator lanes, delegated to implementor subagents** (maintainer: "maybe
-  we can start delegating some of these to the implementor agent ... do the ones that will
-  help us accelerate faster first"). Order and why, with measured costs and per-item token
-  estimates in the vault note `opencode-claude-code-plugin/Future Features.md`, section
-  "Cost calibration and weights": (1) condense AGENTS.md, 182 KB / about 45k tokens sent with
-  every reply of every session; (2) split `src/claude-code-language-model.ts` (5,383 lines),
-  behaviour-preserving; (3) tests for modules no test covers (`tmp.ts`, `cleanup-stale.ts`,
-  and the other gaps listed in the roadmap). Lane 1 runs first and alone, because lanes 2
-  and 3 are heavy and every reply they make re-reads AGENTS.md; they then run in parallel
-  from the condensed file. Measured baseline: tasks this week cost 12M to 29M tokens each in a
-  session carrying 450k to 650k context; a fresh session is about a third of that.
 - 2026-09-23: opencode 2, the checks that were not possible before release. (1) Install
   by npm name (it failed from this Mac because Aikido's age filter hid the new version): `plugins: ["@khalilgharbaoui/opencode-claude-code-plugin@0.26.0"]` failed
   with `NpmInstallFail` right after publishing, because the registry's aggregate
@@ -120,6 +109,12 @@ Nothing parked.
 
 ## Done
 
+- 2026-09-26: **done**, the three accelerator lanes, each an implementor subagent: PR #47
+  (AGENTS.md 182 KB to 53.6 KB, history verbatim in `docs/agents-history.md`, three dropped
+  rules restored before merge), PR #49 (language model 5,383 to 4,105 lines, ten modules, no
+  behaviour change), PR #48 (720 to 784 tests, bash 3.2 wrapper bug fixed). Master green at
+  784, live-checked on opencode 1.18.32 and 2.0.11. Measured cost against the estimates is in
+  the vault roadmap, "Cost calibration and weights".
 - 2026-09-24: **closed, not an npm bug.** The "stuck npm record" was Aikido Endpoint
   Protection on the maintainer's Mac (org-2542): its minimum-package-age policy strips
   too-new versions from the npm package document and resets `latest`, confirmed by its
