@@ -184,6 +184,7 @@ Both question round-trips are verified, so treat older "blocked upstream, leave 
 - **The live-state client is a shim** (`src/v2-client.ts`): `mcp.status`, `tool.list` and `session.get`, with anything V2 cannot answer left out so its caller takes the no-client path. The agent **registry** is still built by `buildAgentRegistry` from disk, never from `agent.list()`. `test-v2-client.ts`. (h #g37)
 - **`/btw` and the doctor are real commands** sending V1's template text through `session.prompt`. `/btw` is always `delivery: "queue"`: steered into a running turn it would swallow the turn's continuation. Answering inside a running turn is not ported. (h #g38)
 - **Sandbox and probe discipline**: `~/opencode-v2-sandbox/env.sh` redirects all four XDG dirs and `TMPDIR`; always `--standalone`; never `opencode service start`, which may register a login item. A configured plugin path must be a directory, so a local checkout is `<repo>/dist`. (h #g39)
+- **Last measured on opencode 2.0.16** (2026-09-27, `V2.md`): text turn, CLI-executed `read`, proxied `shell`, subagent dispatch and an npm-name install all pass; the plugin API's only type change since 2.0.11 is a `signal` on the tool context. With no `accounts` the V2 provider id is `claude-code`, so a probe using `claude-code-default/<model>` fails with `Model unavailable` while the plugin is fine.
 
 ### Interactive transport
 

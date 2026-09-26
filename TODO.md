@@ -106,12 +106,12 @@ Nothing parked.
 
 ## In progress
 
-- 2026-09-23: opencode 2, the checks that were not possible before release. (1) Install
-  by npm name (it failed from this Mac because Aikido's age filter hid the new version): `plugins: ["@khalilgharbaoui/opencode-claude-code-plugin@0.26.0"]` failed
-  with `NpmInstallFail` right after publishing, because the registry's aggregate
-  packument still listed `latest: 0.24.0`; retry once it lists 0.26.0. (2) Account
+- 2026-09-23: opencode 2, the checks that were not possible before release. (1) **Done
+  2026-09-27**: install by npm name works on 2.0.16 (`@0.27.0`, with and without a provider
+  block; `@0.28.1` is still hidden from this Mac by Aikido's age filter). (2) Account
   failover and the plan-mode form on V2, which need a real usage limit and a headless
   `ExitPlanMode`. (3) Permission prompts in the V2 TUI: every probe ran with `--auto`.
+  Sandbox moved to 2.0.16 the same day; evidence in `V2.md`.
 
 ## Done
 
