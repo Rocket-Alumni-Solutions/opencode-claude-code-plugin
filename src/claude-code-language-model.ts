@@ -3149,7 +3149,7 @@ export class ClaudeCodeLanguageModel implements LanguageModelV3 {
                   if (!skip) {
                     toolCallsById.set(tc.id, {
                       id: tc.id,
-                      name: tc.name,
+                      name: mappedName,
                       input: parsedInput,
                     })
                     if (!executed) skipResultForIds.add(tc.id)
@@ -3377,7 +3377,7 @@ export class ClaudeCodeLanguageModel implements LanguageModelV3 {
                     if (!skip) {
                       toolCallsById.set(block.id, {
                         id: block.id,
-                        name: block.name,
+                        name: mappedName,
                         input: parsedInput,
                       })
                       if (!executed) skipResultForIds.add(block.id)
