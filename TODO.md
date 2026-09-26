@@ -92,6 +92,12 @@ Nothing queued here; the working backlog is the vault note
 Questions the maintainer still owes an answer on. Written here the turn they are
 raised, so they survive context compaction; removed when answered, done or dropped.
 
+- 2026-09-27: **contributor PR #46 (@acastro2, opened 2026-09-24), unreviewed.** Fixes CLI
+  tool results being emitted under the raw CLI name while their call used the mapped name
+  (`toolCallsById` stored the raw name), so opencode 2.0.16 aborts every turn that uses a
+  Claude-side MCP server ("Tool result name changed"). Measured by the contributor on plugin
+  0.27.1, opencode 2.0.16, Claude Code 2.1.280. Needs review against the split (#49) and the
+  V2 name translation in `src/host-tools.ts`, then merge with credit and a patch release.
 - 2026-09-26: follow-ups the lanes reported, not scheduled: (1) Windows spawns go through
   `cmd.exe` with no argument quoting (injection with `& | > ^`, broken with spaces or quotes);
   needs a Windows CI job first, then a resolver and escaper. Do it, or leave it documented?
