@@ -257,8 +257,8 @@ export function claudeSpawnEnv(opts?: {
   }
 
   // Force subscription auth: with an API key in the env, Claude Code bills
-  // pay-as-you-go (Console) instead of the logged-in plan, bypassing the
-  // Agent SDK credit. Opt-in via `ignoreAnthropicApiKey`.
+  // pay-as-you-go (Console) instead of the logged-in plan's usage limits.
+  // Opt-in via `ignoreAnthropicApiKey`.
   if (opts?.ignoreAnthropicApiKey) {
     delete env.ANTHROPIC_API_KEY
     delete env.ANTHROPIC_AUTH_TOKEN

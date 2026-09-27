@@ -668,8 +668,8 @@ The CLI decides; the plugin only reports. Never state which of these is in effec
 
 - **OAuth subscription login** (`claude auth login`): turns run on the user's plan.
   Headless `--print` is the Agent SDK path; see the note at the top of this file before
-  telling a user what that draws from. The interactive transport bills as normal plan
-  usage, which is not a reason to enable it.
+  telling a user what that draws from. The interactive transport draws from the same
+  plan usage limits, so it is not a way to change what a turn costs.
 - **`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` in the launching environment**: the CLI
   prefers these over the subscription login and bills Platform pay-as-you-go. This is the
   only route `ignoreAnthropicApiKey: true` strips, and the plugin warns at startup

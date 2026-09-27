@@ -143,7 +143,7 @@ function warnIfAnthropicApiKey(ignore: boolean | undefined): void {
     )
   } else {
     log.warn(
-      "ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN detected; claude may bill as pay-as-you-go API usage instead of your subscription / Agent SDK credit. Set provider option `ignoreAnthropicApiKey: true` to force subscription auth.",
+      "ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN detected; claude may bill as pay-as-you-go API usage instead of your subscription. Set provider option `ignoreAnthropicApiKey: true` to force subscription auth.",
     )
   }
 }

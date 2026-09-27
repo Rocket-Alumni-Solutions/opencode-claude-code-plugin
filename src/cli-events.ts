@@ -241,7 +241,7 @@ export interface SystemInitInfo {
 /**
  * Credential sources that mean the CLI authenticated with an API key rather
  * than the logged-in subscription, so the turn bills pay-as-you-go against the
- * Console account and never touches the plan's Agent SDK credit. `oauth` is
+ * Console account and never touches the plan's usage limits. `oauth` is
  * the subscription and `none` is no credential at all; everything else in the
  * CLI's enum is a key from some scope.
  */
@@ -289,7 +289,7 @@ export function apiKeySourceWarning(
   ignoreAnthropicApiKey: boolean | undefined,
 ): string | null {
   if (!apiKeySource || !API_KEY_SOURCES.has(apiKeySource)) return null
-  const base = `Claude Code authenticated with an API key (apiKeySource: ${apiKeySource}), so these turns bill as pay-as-you-go API usage instead of your subscription's Agent SDK credit.`
+  const base = `Claude Code authenticated with an API key (apiKeySource: ${apiKeySource}), so these turns bill as pay-as-you-go API usage instead of your subscription.`
   return ignoreAnthropicApiKey
     ? `${base} \`ignoreAnthropicApiKey\` is already on, so the key is not coming from the environment: check the CLI's own settings (\`claude config\`) or an \`apiKeyHelper\`.`
     : `${base} Set the provider option \`ignoreAnthropicApiKey: true\` to strip the key from spawns and fall back to the stored subscription auth.`
