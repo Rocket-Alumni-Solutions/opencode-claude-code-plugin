@@ -329,7 +329,12 @@ with two spawns in the log, `"--model","claude-mythos-5-1"` then `"--model","cla
 
 Two things that cost time and are worth not repeating. The probe originally tried to reach a retired id by declaring it under `provider.claude-code.models`; that crashes `configModelsForProvider` with `undefined is not an object (evaluating 'model.capabilities.input')` and takes the **whole config hook** with it, so the plugin silently never registers and opencode falls through to a generic HTTP provider (`"undefined/chat/completions" cannot be parsed as a URL`). A user model entry has to be a full `OpenCodeModel`, and that fragility is pre-existing and unrelated to this work. The working route is a **registered** model the account cannot serve, which `claude-mythos-5-1` is. Second, an unknown id in `forceModel` is refused by `resolveAgentModel` exactly as an unknown chain entry is, so a probe cannot start a turn on a retired id through an agent file either.
 
-<a id="g44"></a>
+<a id="g163"></a>
+
+#### A partial user model entry must never throw (fixed 2026-09-27)
+
+- Found by the fallback-chain lane above and fixed on master the same day. opencode's config schema makes every field of a `provider.<id>.models.<model>` entry optional, so the entries real users write are partial (`{ "name": "...", "limit": { "context": 100000 } }`), and `configModelsForProvider` handed such an entry to `toConfigModel`, which reads `model.capabilities.input` and threw. The throw happened inside the V1 `config` hook, so the whole provider registration was lost: no `claude-code` provider, no `plugin ready` block, and opencode fell through to a generic HTTP provider whose error (`"undefined/chat/completions" cannot be parsed as a URL`) named nothing useful.
+- The fix is `completeUserModel` in `src/index.ts`: an entry that carries the full runtime shape (`capabilities.input`/`.output`, `cost.cache`, `api`) converts exactly as before; anything else is overlaid on `passthroughModel(id)` from `src/models.ts`, a complete template with zero cost (unknown, not free), the id as its name, the conservative 200k / 64k window and the reasoning variants, with `cost`, `limit` and `variants` merged key by key. A WARN names the id and the keys the entry declared, so a typo'd id is still visible. `test-config-models.ts` covers the partial entry, the merged `limit`, and a `null` entry.
 
 #### /compact must not fall through the
 

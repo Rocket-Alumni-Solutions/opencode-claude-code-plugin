@@ -59,6 +59,34 @@ function defineModel(opts: {
   }
 }
 
+/**
+ * The complete model a user-declared id that this plugin does not know is
+ * built on. opencode's config schema makes every model field optional, so a
+ * `provider.claude-code.models` entry is usually partial (a name, a limit, a
+ * variant), and `toConfigModel` on a partial entry used to throw inside the
+ * config hook, which silently unregistered the whole provider. Costs are zero
+ * because they are unknown, the name is the id, and the window is the 4.5
+ * generation's, the conservative choice; the entry's own fields overlay all of
+ * it. The id still passes straight through to `claude --model`.
+ */
+export function passthroughModel(id: string): OpenCodeModel {
+  return {
+    id,
+    providerID: PROVIDER_ID,
+    api: { id, url: "", npm: NPM },
+    name: id,
+    family: "",
+    capabilities: { ...baseCapabilities, reasoning: true },
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: 200_000, output: 64_000 },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "",
+    variants: reasoningVariants,
+  }
+}
+
 // Costs in US dollars per MILLION tokens, matching Anthropic's published
 // pricing verbatim. This is the unit opencode and models.dev use: opencode
 // divides by 1e6 itself when it multiplies a cost by a token count, so writing

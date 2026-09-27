@@ -281,6 +281,35 @@ test("configModelsForProvider passes through user models not in defaults", () =>
   assert.ok(models["my-custom-model"], "user-only model must be emitted")
 })
 
+test("configModelsForProvider completes a partial user model instead of throwing", () => {
+  // opencode's config schema makes every model field optional, so this is the
+  // shape a real opencode.json entry has. It used to throw on
+  // `model.capabilities.input` inside the config hook, which silently
+  // unregistered the whole provider.
+  const userConfig = {
+    "claude-3-opus-20240229": { name: "Opus 3 (retired)", limit: { context: 100_000 } },
+  } as unknown as OpenCodeProvider["models"]
+
+  const models = configModelsForProvider(userConfig, "claude-code")
+  const entry = models["claude-3-opus-20240229"] as Record<string, unknown>
+  assert.ok(entry, "partial user model must be emitted")
+  assert.equal(entry.id, "claude-3-opus-20240229")
+  assert.equal(entry.name, "Opus 3 (retired)")
+  assert.deepEqual(entry.limit, { context: 100_000, output: 64_000 }, "partial limit merges with the template")
+  assert.deepEqual(entry.cost, { input: 0, output: 0, cache_read: 0, cache_write: 0 })
+  assert.deepEqual(entry.modalities, { input: ["text", "image"], output: ["text"] })
+  assert.equal(entry.tool_call, true)
+  assert.ok("max" in (entry.variants as Record<string, unknown>), "template variants apply")
+  // The default models are untouched by the completion path.
+  assert.equal((models["claude-opus-4-8"] as Record<string, unknown>).name, "Claude Opus 4.8 (5×)")
+})
+
+test("configModelsForProvider tolerates a non-object user model entry", () => {
+  const userConfig = { "some-model": null } as unknown as OpenCodeProvider["models"]
+  const models = configModelsForProvider(userConfig, "claude-code")
+  assert.equal((models["some-model"] as Record<string, unknown>).id, "some-model")
+})
+
 test("createClaudeCode passes idle process timeout to language models", () => {
   const model = createClaudeCode({ idleProcessTimeoutMs: 900_000 })(
     "claude-sonnet-5",

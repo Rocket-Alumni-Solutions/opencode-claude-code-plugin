@@ -1,6 +1,6 @@
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { ClaudeCodeLanguageModel } from "./claude-code-language-model.js"
-import { defaultModels, toConfigModel } from "./models.js"
+import { defaultModels, passthroughModel, toConfigModel } from "./models.js"
 import type {
   OpenCodeConfig,
   OpenCodeEvent,
@@ -380,11 +380,60 @@ export function configModelsForProvider(
 
   for (const [id, model] of Object.entries(providerModels)) {
     if (!(id in models)) {
-      models[id] = toConfigModel({ ...model, providerID } as OpenCodeModel)
+      models[id] = completeUserModel(id, model, providerID)
     }
   }
 
   return models
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+/**
+ * A user model id this plugin does not register, in the flat config schema.
+ *
+ * A full runtime-shaped entry (`capabilities`, nested `cost.cache`) converts as
+ * before. Anything else is what opencode's config schema actually allows, a
+ * partial entry in the flat shape, and it is overlaid on `passthroughModel`'s
+ * complete template rather than converted, because converting a partial entry
+ * threw `undefined is not an object (evaluating 'model.capabilities.input')`
+ * inside the config hook and took the whole provider registration with it
+ * (found 2026-09-27 while probing the fallback chain). Nested `cost`, `limit`
+ * and `variants` merge key by key so a partial `limit: { context }` keeps the
+ * template's `output`.
+ */
+function completeUserModel(
+  id: string,
+  entry: unknown,
+  providerID: string,
+): Record<string, unknown> {
+  const record = isRecord(entry) ? entry : {}
+  const runtimeShaped =
+    isRecord(record.capabilities) &&
+    isRecord(record.capabilities.input) &&
+    isRecord(record.capabilities.output) &&
+    isRecord(record.cost) &&
+    isRecord(record.cost.cache) &&
+    isRecord(record.api)
+  if (runtimeShaped) {
+    return toConfigModel({ ...(record as unknown as OpenCodeModel), providerID })
+  }
+  const base = toConfigModel({ ...passthroughModel(id), providerID })
+  log.warn("provider model entry is partial; completing it from the pass-through template", {
+    providerID,
+    model: id,
+    declared: Object.keys(record),
+  })
+  const merged: Record<string, unknown> = { ...base, ...record, id }
+  for (const key of ["cost", "limit", "variants"] as const) {
+    merged[key] = {
+      ...(isRecord(base[key]) ? base[key] : {}),
+      ...(isRecord(record[key]) ? record[key] : {}),
+    }
+  }
+  return merged
 }
 
 async function providerConfig(
