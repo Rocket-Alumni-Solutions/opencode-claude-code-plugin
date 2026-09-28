@@ -66,29 +66,11 @@ Nothing queued here; the working backlog is the vault note
 
 ## Deferred decisions
 
-- 2026-09-20: The maintainer chose "later" for adding the Appical MCP project block
-  to `Appical.IaC`, `Cl-nica-Aurora---Player-team`, `Manager-toolkit`,
-  `NOW-player-web` and `workshop-sep-2026`. **Done 2026-09-28** ("go ahead"): each got
-  the same `opencode.json` as `webapp` (Linear, Sentry and Aikido enabled per project),
-  listed in that repo's `.git/info/exclude` so nothing shows in `git status` and nothing
-  can be committed to a work repo by accident.
-- 2026-09-20: The maintainer chose "later" for choosing a Slack authentication
-  strategy. The current global server can still pay a 30-second 1Password unlock
-  timeout on startup.
-- 2026-09-20: The maintainer chose "later" for completing opencode's separate,
-  global Linear OAuth authentication.
-- 2026-09-23: The maintainer parked `opencode-local-ollama` ("forget the
-  opencode-local-ollama we will get to it later or not because it dying"). State when
-  parked: it stays in the global config and cannot collide on either major (checked
-  live: opencode 2.0.11 refuses to load it and its built-in Ollama provider lists the
-  same models either way; 1.x has no built-in `ollama`). Release prep sits unmerged as
-  local-ollama PR #1 (`release-0.1.2`, OIDC publishing); publishing it still needs the
-  npm trusted publisher added on npmjs.com. The stale `v0.1.1` GitHub release is untouched.
-- 2026-09-23: global plugin cleanup, done: simple-memory, gemini-auth, grok-auth and
-  quota removed from `~/.config/opencode/opencode.json` (quota also from `tui.json`
-  and `tui.jsonc`, backups `*.bak-20260923-195510`), and the Google and xAI logins
-  deleted from opencode's `auth.json`. The unused `lmstudio` provider block is still
-  in the config; nobody asked to remove it.
+Only decisions about this plugin belong here. Items about the global opencode config
+(Slack MCP auth, opencode's Linear OAuth, the unused `lmstudio` block) and the separate
+`opencode-local-ollama` package were moved on 2026-09-28 to the vault note
+`opencode/Open items.md`; they were recorded here only because the sessions that raised
+them ran in this directory.
 
 ## Open from you
 
