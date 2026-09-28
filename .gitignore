@@ -1,3 +1,6 @@
 dist/
 node_modules/
 opencode/
+
+# The repo keeps no lockfile (CI runs npm install); a lane's npm install must not commit one.
+package-lock.json
