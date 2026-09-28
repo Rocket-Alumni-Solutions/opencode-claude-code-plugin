@@ -68,7 +68,10 @@ Nothing queued here; the working backlog is the vault note
 
 - 2026-09-20: The maintainer chose "later" for adding the Appical MCP project block
   to `Appical.IaC`, `Cl-nica-Aurora---Player-team`, `Manager-toolkit`,
-  `NOW-player-web` and `workshop-sep-2026`.
+  `NOW-player-web` and `workshop-sep-2026`. **Done 2026-09-28** ("go ahead"): each got
+  the same `opencode.json` as `webapp` (Linear, Sentry and Aikido enabled per project),
+  listed in that repo's `.git/info/exclude` so nothing shows in `git status` and nothing
+  can be committed to a work repo by accident.
 - 2026-09-20: The maintainer chose "later" for choosing a Slack authentication
   strategy. The current global server can still pay a 30-second 1Password unlock
   timeout on startup.
@@ -92,13 +95,10 @@ Nothing queued here; the working backlog is the vault note
 Questions the maintainer still owes an answer on. Written here the turn they are
 raised, so they survive context compaction; removed when answered, done or dropped.
 
-- 2026-09-26: follow-ups the lanes reported, not scheduled: (1) Windows spawns go through
-  `cmd.exe` with no argument quoting (injection with `& | > ^`, broken with spaces or quotes);
-  needs a Windows CI job first, then a resolver and escaper. 2026-09-27: left documented until a
-  Windows user appears (none has ever filed an issue).
-  (2) **done** 2026-09-27 (v0.29.0, PR #55);
-  (3) the language model's remaining turn state (54 shared identifiers) and routing
-  `doGenerate` through `doGenerateViaStream`, each a deliberate refactor with a live probe.
+- 2026-09-26: Windows spawns go through `cmd.exe` with no argument quoting (injection with
+  `& | > ^`, broken with spaces or quotes); needs a Windows CI job first, then a resolver and
+  escaper. 2026-09-27: left documented until a Windows user appears (none has ever filed an
+  issue). The other two follow-ups from that day shipped (v0.29.0 PR #55, v0.29.1 PR #58 and #59).
 
 ## Parked
 
@@ -115,6 +115,13 @@ Nothing parked.
 
 ## Done
 
+- 2026-09-28: **done** (v0.29.1): the two deliberate refactors, one implementor lane each,
+  sequential because both rewrite the language model. PR #58 routes `doGenerate` through the
+  one turn implementation (4,375 to 3,832 lines; measured that opencode 1.18.32 never calls
+  `doGenerate`, so a fake-CLI test holds it). PR #59 extracts `TurnState`, the controller and
+  the stream parser (to 2,404 lines, shared identifiers 87 to 16), gated green after each step,
+  live probe identical line for line. `package-lock.json` is now gitignored because every
+  lane's `npm install` created one.
 - 2026-09-27: **done** (v0.29.0): the roadmap batch. Sandbox moved to opencode 2.0.16 and
   re-probed (`V2.md`). Three implementor lanes: PR #54 comparison table and symptom-first
   troubleshooting guide, PR #55 `permissionPreset` in the doctor and startup block plus the
