@@ -96,7 +96,7 @@ raised, so they survive context compaction; removed when answered, done or dropp
   `cmd.exe` with no argument quoting (injection with `& | > ^`, broken with spaces or quotes);
   needs a Windows CI job first, then a resolver and escaper. 2026-09-27: left documented until a
   Windows user appears (none has ever filed an issue).
-  (2) show `permissionPreset` in `/claude-code-doctor` and the startup block (small);
+  (2) **done** 2026-09-27 (v0.29.0, PR #55);
   (3) the language model's remaining turn state (54 shared identifiers) and routing
   `doGenerate` through `doGenerateViaStream`, each a deliberate refactor with a live probe.
 
@@ -115,6 +115,16 @@ Nothing parked.
 
 ## Done
 
+- 2026-09-27: **done** (v0.29.0): the roadmap batch. Sandbox moved to opencode 2.0.16 and
+  re-probed (`V2.md`). Three implementor lanes: PR #54 comparison table and symptom-first
+  troubleshooting guide, PR #55 `permissionPreset` in the doctor and startup block plus the
+  measured verdict that `tombstone` is declared but never emitted on 2.1.280, PR #56 the
+  `fallbackModels` chain (two exact triggers, failover form wins, live-checked). On master:
+  the billing text corrected (the Agent SDK credit was paused on 2026-06-15 and never took
+  effect, verified on Anthropic's page), and a partial `provider.claude-code.models` entry
+  no longer throws inside the config hook. 868 tests. The first attempt at PR #55 and #56
+  died on the implementor account's session limit; three concurrent lanes plus this session
+  share one window, so re-dispatched after the reset.
 - 2026-09-27: **done** (v0.28.1): contributor PR #46 (@acastro2) merged with credit. CLI tool
   results now carry their call's mapped name, so opencode 2.0.16 no longer aborts turns that
   use a Claude-side MCP server. Reviewed: the stored name is read only by the result emit, and
