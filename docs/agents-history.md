@@ -498,6 +498,7 @@ Also measured, and worth having on record because it is not what the tool name s
 #### /compact must not fall through the
 
 - `/compact` must not fall through the no-tools title stub. It is detected via `opencodeAgent === "compaction"`, runs through `doStream`, uses a fresh short-lived Claude CLI process, skips MCP/proxy/tool wiring, and defaults to `claude-haiku-4-5`.
+- **Live-verified end to end 2026-09-30** (the lane's own probe had stopped on the usage limit): opencode 1.18.33, plugin 0.31.0, scratch XDG dirs, Haiku 4.5. A turn on the default `build` agent keyed `context=["claude-code","build"]` and its Claude transcript shows 66,480 cache-write tokens at 1h and 0 at 5m; the same prompt under an agent declaring `cacheTtl: 5m` keyed `context=["claude-code","thrifty","5m"]` and shows 63,150 at 5m and 0 at 1h.
 
 <a id="g45"></a>
 

@@ -97,6 +97,17 @@ Nothing parked.
 
 ## Done
 
+- 2026-09-30: **done** (v0.31.0). Two contributor PRs for the same bug (turn-summed usage
+  made opencode auto-compact early): #63 (@broskees) merged after its three claims were
+  measured against the real CLI and an A/B through opencode (193,659 vs 39,681 stored tokens);
+  #62 (@bangnh1) closed as superseded with thanks, both credited. Issue #64: Claude Sonnet 5.5
+  registered from Anthropic's pages, Claude Code 2.1.284 is its floor (CHANGELOG), an older CLI
+  runs it on fallback limits and the plugin now warns on `unrecognized_model`. Sonnet 5 corrected
+  to $2/$10 (the $3/$15 increase was cancelled). The per-agent `cacheTtl` from 0.30.0 was
+  live-verified end to end (5m writes under `cacheTtl: 5m`, 1h otherwise). 907 tests.
+  Follow-ups: the interactive transport sums `output_tokens` per transcript record (#63's
+  note, needs a Bun run); `plugin_errors`/`plugin_warnings` on init (#60's note); the
+  account-failover switch still awaits a real limit.
 - 2026-09-28: **done** (v0.29.2, v0.30.0). v0.29.2: the first real usage limit showed the
   account-failover form still could not switch (opencode's answer ends in a newline, the
   unwrapper wanted an exact suffix); both live picks were logged as `unrecognised answer`.
@@ -105,8 +116,8 @@ Nothing parked.
   exists, one `ToolSearch` per process instead; `mcp_server_errors` reported; opt-in
   `/claude-code-doctor usage`, whose spawn I moved onto `claudeSpawnEnv`) and PR #61 (the
   CLI's subagent knobs cannot reach our main-conversation spawns; per-agent `cacheTtl` and
-  `defaultSubagentCacheTtl` instead). 897 tests. Open: the failover switch path and the
-  end-to-end `cacheTtl` turn are not yet live-verified (the lane's probe hit the limit).
+  `defaultSubagentCacheTtl` instead). 897 tests. Open: the failover switch path is not yet
+  live-verified; the `cacheTtl` turn was verified 2026-09-30.
 - 2026-09-28: **done** (v0.29.1): the two deliberate refactors, one implementor lane each,
   sequential because both rewrite the language model. PR #58 routes `doGenerate` through the
   one turn implementation (4,375 to 3,832 lines; measured that opencode 1.18.32 never calls
