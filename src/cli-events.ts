@@ -648,3 +648,83 @@ export function formatSilentTurnNote(hadReasoning: boolean): string {
     "Nothing failed and nothing is pending: send the message again, or rephrase it.\n"
   )
 }
+
+// ---------------------------------------------------------------------------
+// unrecognized_model (stderr)
+// ---------------------------------------------------------------------------
+
+/**
+ * The line a CLI writes to stderr when `--model` names a model it has no
+ * catalog entry for. Verbatim from Claude Code 2.1.280 running
+ * `claude-sonnet-5-5` in the plugin's own mode (`-p`, stream-json, verbose),
+ * 2026-09-30: `[claude-code:unrecognized_model] {"model":"claude-sonnet-5-5",
+ * "query_source":"sdk"}`. A model it knows writes nothing to stderr.
+ *
+ * The turn still succeeds, which is why nothing else notices: the API serves
+ * the model, but the CLI runs it on fallback limits. Measured on that pair:
+ * `modelUsage.contextWindow` 200,000 for a 1M model, and a `total_cost_usd`
+ * the CLI estimated rather than priced. So its own compaction can work
+ * against the wrong window and the `turnStats` cost is approximate, until the user
+ * updates Claude Code to a release that ships the model.
+ */
+export const UNRECOGNIZED_MODEL_STDERR_MARKER = "[claude-code:unrecognized_model]"
+
+/**
+ * The first Claude Code release that knows a model, where it is known, so the
+ * warning can name the fix exactly. Taken from Claude Code's CHANGELOG, not
+ * inferred; a model missing here still gets the generic advice.
+ */
+const MODEL_CLI_FLOORS: Record<string, string> = {
+  // "Added Claude Sonnet 5.5 (`claude-sonnet-5-5`)" (CHANGELOG, 2.1.284).
+  "claude-sonnet-5-5": "2.1.284",
+}
+
+/**
+ * The model named by an `unrecognized_model` line anywhere in a stderr chunk,
+ * `{ model: undefined }` when the marker is there but its payload does not
+ * parse, and null when the chunk carries no such line.
+ */
+export function parseUnrecognizedModel(stderr: string): { model: string | undefined } | null {
+  const at = stderr.indexOf(UNRECOGNIZED_MODEL_STDERR_MARKER)
+  if (at === -1) return null
+  const rest = stderr.slice(at + UNRECOGNIZED_MODEL_STDERR_MARKER.length)
+  const line = rest.split("\n", 1)[0].trim()
+  try {
+    const payload: unknown = JSON.parse(line)
+    return { model: isRecord(payload) ? str(payload.model) : undefined }
+  } catch {
+    return { model: undefined }
+  }
+}
+
+const warnedUnrecognizedModels = new Set<string>()
+
+/** Test-only. */
+export function _resetUnrecognizedModelReports(): void {
+  warnedUnrecognizedModels.clear()
+}
+
+/**
+ * WARN once per model per process when the CLI says it does not know the
+ * model it was spawned with. The CLI writes the line on every turn, so the
+ * repeats go to DEBUG.
+ */
+export function reportUnrecognizedModel(stderr: string): void {
+  const parsed = parseUnrecognizedModel(stderr)
+  if (!parsed) return
+  const model = parsed.model ?? "unknown"
+  const floor = parsed.model ? MODEL_CLI_FLOORS[parsed.model] : undefined
+  const fix = floor
+    ? `It needs Claude Code ${floor} or newer: run \`claude update\`.`
+    : "Update Claude Code (`claude update`) to a release that knows it."
+  const message =
+    `Claude Code does not recognise the model "${model}". It still runs it, but on ` +
+    "fallback limits (measured on 2.1.280: a 200k context window instead of 1M, and " +
+    `an estimated cost), so its own compaction may start early and turnStats' cost is approximate. ${fix}`
+  if (warnedUnrecognizedModels.has(model)) {
+    log.debug(message, { model })
+    return
+  }
+  warnedUnrecognizedModels.add(model)
+  log.warn(message, { model, ...(floor ? { cliFloor: floor } : {}) })
+}

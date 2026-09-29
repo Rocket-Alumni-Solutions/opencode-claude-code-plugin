@@ -575,15 +575,15 @@ No manual skill copy/update is needed. Do not publish or release as part of conf
 ### Registered model ids
 
 Registered ids: `claude-haiku-4-5`, `claude-sonnet-4-5`, `claude-sonnet-4-6`,
-`claude-sonnet-5`, `claude-opus-4-5`, `claude-opus-4-6`, `claude-opus-4-7`,
-`claude-opus-4-8`, `claude-opus-4-8-fast`, `claude-opus-5`, `claude-opus-5-fast`,
-`claude-opus-5-5`, `claude-opus-5-5-fast`, `claude-fable-5`, `claude-fable-5-1`,
-`claude-mythos-5`, `claude-mythos-5-1`.
+`claude-sonnet-5`, `claude-sonnet-5-5`, `claude-opus-4-5`, `claude-opus-4-6`,
+`claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-4-8-fast`, `claude-opus-5`,
+`claude-opus-5-fast`, `claude-opus-5-5`, `claude-opus-5-5-fast`, `claude-fable-5`,
+`claude-fable-5-1`, `claude-mythos-5`, `claude-mythos-5-1`.
 
 ### Variants and costs
 
 - Display names end in a `(N×)` list-price multiplier relative to Haiku: 1× haiku,
-  3× sonnet, 4× opus 5.5, 5× other opus, 8× fast-mode opus 5.5, 10× fable, mythos
+  2× sonnet 5 and 5.5, 3× sonnet 4.5/4.6, 4× opus 5.5, 5× other opus, 8× fast-mode opus 5.5, 10× fable, mythos
   and fast-mode opus 5 / 4.8. It is display only.
 - Every model except Haiku has reasoning variants `low`, `medium`, `high`, `xhigh`,
   `max`, picked in opencode's model selector. A variant becomes
@@ -596,6 +596,9 @@ Registered ids: `claude-haiku-4-5`, `claude-sonnet-4-5`, `claude-sonnet-4-6`,
   reason. Switch to a non-fast id rather than silently enabling paid usage credits.
   Review eligibility/billing with the user; the enabled state needs live verification
   on their account. CLI floors are gates, not proof of model access.
+- `claude-sonnet-5-5` needs Claude Code 2.1.284+ to run on its real limits. An older CLI
+  still serves it on fallback limits (200k context, an estimated cost), and the plugin
+  logs a WARN naming the model and the floor: the fix is `claude update`.
 - `claude-mythos-5` and `claude-mythos-5-1` are limited availability (Project Glasswing).
   Without access `claude --model` errors; use the corresponding `claude-fable-*`.
 - Ordinary calls can pass through unregistered ids; availability and opencode model

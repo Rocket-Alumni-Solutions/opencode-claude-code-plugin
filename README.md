@@ -69,7 +69,7 @@ That package spec is the whole install. Do **not** `npm install` the package you
 
 Quit opencode fully and relaunch it: plugins are loaded once, at process start, so a reload is not enough.
 
-In the model picker you should now see a provider called **Claude Code (Default)** holding entries such as `Claude Haiku 4.5 (1×)`, `Claude Sonnet 5 (3×)` and `Claude Opus 5 (5×)`. The `(N×)` suffix is each model's list price relative to Haiku; see [Models](#models). Pick one and send a message.
+In the model picker you should now see a provider called **Claude Code (Default)** holding entries such as `Claude Haiku 4.5 (1×)`, `Claude Sonnet 5.5 (2×)` and `Claude Opus 5 (5×)`. The `(N×)` suffix is each model's list price relative to Haiku; see [Models](#models). Pick one and send a message.
 
 If the provider does not appear, if the models are there but a message fails, or if a version you just upgraded to is missing, go to [Troubleshooting](#troubleshooting). It is keyed on the first thing you see and names one check per symptom.
 
@@ -122,14 +122,15 @@ Verified live on opencode **2.0.11** with Claude Code 2.1.280: chat turns, proxi
 
 ## Models
 
-The plugin auto-registers the following, and they appear in the model picker with no extra config: Haiku 4.5, Sonnet 4.5/4.6/5, Opus 4.5/4.6/4.7/4.8/5/5.5 (plus three fast-mode Opus entries), Fable 5/5.1 and Mythos 5/5.1, each except Haiku carrying `low` / `medium` / `high` / `xhigh` / `max` reasoning variants.
+The plugin auto-registers the following, and they appear in the model picker with no extra config: Haiku 4.5, Sonnet 4.5/4.6/5/5.5, Opus 4.5/4.6/4.7/4.8/5/5.5 (plus three fast-mode Opus entries), Fable 5/5.1 and Mythos 5/5.1, each except Haiku carrying `low` / `medium` / `high` / `xhigh` / `max` reasoning variants.
 
 | ID | Display name | Context | Output | Reasoning variants | Price × |
 |---|---|---|---|---|---|
 | `claude-haiku-4-5` | Claude Haiku 4.5 | 200k | 64,000 | – | 1× |
 | `claude-sonnet-4-5` | Claude Sonnet 4.5 | 200k | 64,000 | low/medium/high/xhigh/max | 3× |
 | `claude-sonnet-4-6` | Claude Sonnet 4.6 | 1M | 128,000 | low/medium/high/xhigh/max | 3× |
-| `claude-sonnet-5` | Claude Sonnet 5 | 1M | 128,000 | low/medium/high/xhigh/max | 3× |
+| `claude-sonnet-5` | Claude Sonnet 5 | 1M | 128,000 | low/medium/high/xhigh/max | 2× |
+| `claude-sonnet-5-5` | Claude Sonnet 5.5 | 1M | 128,000 | low/medium/high/xhigh/max | 2× |
 | `claude-opus-4-5` | Claude Opus 4.5 | 200k | 64,000 | low/medium/high/xhigh/max | 5× |
 | `claude-opus-4-6` | Claude Opus 4.6 | 1M | 128,000 | low/medium/high/xhigh/max | 5× |
 | `claude-opus-4-7` | Claude Opus 4.7 | 1M | 128,000 | low/medium/high/xhigh/max | 5× |
@@ -148,9 +149,11 @@ The plugin auto-registers the following, and they appear in the model picker wit
 
 Capabilities for every model: text + image input, text output, tool use, attachments. No temperature control, no PDF/audio/video, no interleaved streaming.
 
-**Price ×** is each model's per-token list price relative to Haiku, the cheapest model. It's derived exactly from Anthropic's published pricing (input and output ratios both come out the same: Haiku $1/$5 = 1×, Sonnet $3/$15 = 3×, Opus 5.5 $4/$20 = 4×, Opus $5/$25 = 5×, Opus 5.5 fast mode $8/$40 = 8×, Fable/Mythos 5 and 5.1 / Opus 5 and 4.8 fast mode $10/$50 = 10×). So **Fable/Mythos 5 and 5.1, and fast-mode Opus 5 and 4.8, all cost 2× standard Opus 5**, and fast mode is 2× the standard price on every Opus that offers it. The same multiplier is shown as a `(N×)` suffix on the display name in opencode's model picker, since opencode has no dedicated multiplier field. On a flat Max/Pro subscription it doubles as a rough guide to how fast each model drains your usage limit.
+**Price ×** is each model's per-token list price relative to Haiku, the cheapest model. It's derived exactly from Anthropic's published pricing (input and output ratios both come out the same: Haiku $1/$5 = 1×, Sonnet 5 and 5.5 $2/$10 = 2×, Sonnet 4.5/4.6 $3/$15 = 3×, Opus 5.5 $4/$20 = 4×, Opus $5/$25 = 5×, Opus 5.5 fast mode $8/$40 = 8×, Fable/Mythos 5 and 5.1 / Opus 5 and 4.8 fast mode $10/$50 = 10×). So **Fable/Mythos 5 and 5.1, and fast-mode Opus 5 and 4.8, all cost 2× standard Opus 5**, and fast mode is 2× the standard price on every Opus that offers it. The same multiplier is shown as a `(N×)` suffix on the display name in opencode's model picker, since opencode has no dedicated multiplier field. On a flat Max/Pro subscription it doubles as a rough guide to how fast each model drains your usage limit.
 
 Fable 5.1 and Mythos 5.1 keep the same $10/M input and $50/M output rates as 5.0, but cache reads cost $0.25/M instead of $1/M. Their cache-write rate remains $12.50/M.
+
+Sonnet 5 and Sonnet 5.5 are $2/M input and $10/M output, with cache writes at $2.50/M and cache reads at $0.20/M. Sonnet 5's price was announced as introductory until 2026-08-31, but Anthropic cancelled the increase to $3/$15, so $2/$10 is its standard price. Sonnet 5.5 runs on any recent Claude Code, but **2.1.284 is the first release that knows it**. An older CLI still serves it, on fallback limits (a 200k context window instead of 1M, and an estimated cost). The plugin warns once when the CLI reports that, and `claude update` fixes it.
 
 Opus 5.5 is priced below the Opus line at $4/M input and $20/M output, with cache writes at $5/M and cache reads at $0.20/M (0.05× input rather than the usual 0.1×). It needs **Claude Code 2.1.280 or newer**: the API rejects it from an older CLI with a 400 naming that floor, which shows up as a failed turn.
 

@@ -31,7 +31,8 @@ function defineModel(opts: {
   releaseDate: string
   // List-price multiplier relative to Haiku (the cheapest model). Derived
   // exactly from published per-token pricing: input AND output ratios both come
-  // out to haiku 1, sonnet 3, opus 5 (opus 5.5: 4), fable/mythos 10. Rendered
+  // out to haiku 1, sonnet 3 (sonnet 5 and 5.5: 2), opus 5 (opus 5.5: 4),
+  // fable/mythos 10. Rendered
   // as an `(N×)` suffix so it surfaces in opencode's model picker, which has no
   // dedicated multiplier field.
   // Display-only: model resolution keys off `id`.
@@ -105,6 +106,13 @@ export function passthroughModel(id: string): OpenCodeModel {
 // one. Verified against the pricing docs 2026-07-26.
 const haikuCost = { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 }
 const sonnetCost = { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 }
+// Sonnet 5 and Sonnet 5.5 are $2/M in, $10/M out, cache read $0.20, 5-minute
+// cache write $2.50. For Sonnet 5 that was announced as introductory pricing
+// through 2026-08-31, and the increase to $3/$15 scheduled for 2026-09-01 was
+// cancelled: Anthropic's pricing page footnote reads "is now the standard
+// price ... will not occur". Sonnet 5.5 launched at the same rates on
+// 2026-09-28. Verified against the pricing page 2026-09-30.
+const sonnet5Cost = { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 }
 // Opus 4.5+ standard pricing is $5/M in, $25/M out (the price cut at 4.5; held
 // through 4.6/4.7/4.8/5). Cache read 0.1x input, cache write 1.25x input.
 const opusCost = { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }
@@ -217,9 +225,25 @@ export const defaultModels: Record<string, OpenCodeModel> = {
     reasoning: true,
     context: 1_000_000,
     output: 128_000,
-    cost: sonnetCost,
-    multiplier: 3,
+    cost: sonnet5Cost,
+    multiplier: 2,
     releaseDate: "2026-06-30",
+  }),
+  // Sonnet 5.5 runs on any recent Claude Code, but 2.1.284 is the first
+  // release that knows it: an older CLI serves it on fallback limits (200k
+  // context, an estimated cost) and says so on stderr, which
+  // `reportUnrecognizedModel` turns into a warning. No `-fast` entry: the CLI
+  // gates fast mode on Opus names.
+  "claude-sonnet-5-5": defineModel({
+    id: "claude-sonnet-5-5",
+    name: "Claude Sonnet 5.5",
+    family: "sonnet",
+    reasoning: true,
+    context: 1_000_000,
+    output: 128_000,
+    cost: sonnet5Cost,
+    multiplier: 2,
+    releaseDate: "2026-09-28",
   }),
   "claude-opus-4-5": defineModel({
     id: "claude-opus-4-5",

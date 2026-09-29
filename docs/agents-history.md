@@ -558,6 +558,7 @@ Also measured, and worth having on record because it is not what the tool name s
 #### Sonnet 5 is on standard pricing
 
 - Sonnet 5 is on **standard pricing** ($3/M in, $15/M out, `sonnetCost`, multiplier 3×) as of 2026-09-01, when its introductory $2/$10 period ended. The `sonnet5Cost` constant is gone; do not reintroduce it, and do not "correct" the 3× suffix back to 2× from an older README or screenshot.
+- **Reversed 2026-09-30, with the source.** The increase this entry recorded never happened. Anthropic's pricing page footnote for Sonnet 5 now reads: "The $2/$10 per million input/output token pricing for Claude Sonnet 5, announced at launch as introductory pricing through August 31, 2026, is now the standard price. The previously scheduled increase to $3/$15 per million input/output tokens on September 1, 2026 will not occur." The entry above followed the announced schedule, not a measured price, so `sonnet5Cost` ($2/$10, cache read $0.20, 5-minute write $2.50) is back and Sonnet 5 shows 2×; Sonnet 5.5, launched at the same rates on 2026-09-28, shares it. See #g170.
 
 <a id="g55"></a>
 
@@ -968,6 +969,15 @@ The fix mirrors what the interactive transport already did (416bef0, `tailTurn`)
 - **What users see**: opencode's per-message token counts now reflect context occupancy, so opencode's computed cost for a multi-call turn counts only the last call's input and cache plus all output. The true turn cost remains in `costUsd` and the `turnStats` line.
 
 Tests: `test-context-usage.ts`, a fake CLI through a real `doStream` (three calls at 100K/110K/120K cache read, a synthetic frame after a real one, no assistant usage at all, a mid-turn proxied boundary, a result-first proxied boundary) plus a pure case for a call carrying `iterations`.
+
+<a id="g170"></a>
+
+#### Sonnet 5.5, the Sonnet 5 price, and a model the CLI does not know (2026-09-30)
+
+- **Issue #64 asked for Claude Sonnet 5.5.** Every fact came from a primary source, not memory: Anthropic's models overview (`claude-sonnet-5-5`, 1M context, 128K output, adaptive thinking, default effort `high`), its model page ("Released September 28, 2026"), the pricing page ($2 in, $10 out, 5-minute cache write $2.50, 1-hour $4, cache read $0.20, batch $1/$5) and its fast-mode section, which names only Opus 5.5, Opus 5 and Opus 4.8, so there is no `-fast` entry (the CLI gates fast mode on Opus names anyway, see the comment above the fast entries in `src/models.ts`). The skill bundled with Claude Code 2.1.280 still had a June model table with no Sonnet 5.5 and Sonnet 5 at $2/$10, which is how the Sonnet 5 correction was noticed.
+- **Which Claude Code knows it.** Claude Code's CHANGELOG for **2.1.284**: "Added Claude Sonnet 5.5 (`claude-sonnet-5-5`), now the default Sonnet model on the Anthropic API". The darwin-arm64 binaries for 2.1.281, 2.1.282 and 2.1.283 (downloaded from npm, shasums checked against the registry) contain no `claude-sonnet-5-5` string, while the same search finds `claude-opus-5-5` 18 times in 2.1.283, so the search works. 2.1.284 and 2.1.285 could not be inspected on this Mac: Aikido Device Protection answers their tarball URLs with a 205-byte "published too recently to be vetted" page. npm's `stable` tag is still 2.1.280.
+- **An older CLI runs it anyway, on fallback limits.** Measured on 2.1.280 (`-p`, stream-json, partial messages, verbose, the plugin's own argv shape): `PONG`, subtype `success`, and stderr `[claude-code:unrecognized_model] {"model":"claude-sonnet-5-5","query_source":"sdk"}`, while `modelUsage["claude-sonnet-5-5"].contextWindow` is **200,000** and the `total_cost_usd` is the CLI's estimate. The same probe with `claude-haiku-4-5` writes zero bytes to stderr. So there is no version gate (nothing is refused, unlike Opus 5.5's 400 from an old CLI) but there is a silent degradation, and `reportUnrecognizedModel` in `src/cli-events.ts` turns the stderr line into one WARN per model per process, naming the release that adds the model when `MODEL_CLI_FLOORS` knows it (only from a CHANGELOG line, never inferred). It is wired in `spawnClaudeProcess`'s stderr handler, next to `retainStderr`. Whether the CLI's own auto-compaction actually fires at the fallback 200k was not measured, which is why the warning says "may".
+- Tests: `test-config-models.ts` (Sonnet 5 and 5.5 metadata and costs, no Sonnet fast entry, 1M limits), `test-cli-events.ts` (the verbatim line, a chunk with earlier output, an unparseable payload, dedupe, the floor and the generic advice) and `test-cli-events-stream.ts` (the fake CLI writes the line to stderr before its turn; the WARN appears and the turn is untouched).
 
 <a id="g110"></a>
 

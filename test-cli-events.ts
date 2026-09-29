@@ -18,6 +18,7 @@ import {
   RESULT_ERROR_MARKER,
   _resetRateLimitReports,
   _resetSystemInitReports,
+  _resetUnrecognizedModelReports,
   apiKeySourceWarning,
   describeRateLimit,
   describeResultFailure,
@@ -29,6 +30,8 @@ import {
   parseRateLimitEvent,
   parseMcpServerErrors,
   parseSystemInit,
+  parseUnrecognizedModel,
+  reportUnrecognizedModel,
   rateLimitKey,
   reportCompactBoundary,
   reportRateLimitEvent,
@@ -381,4 +384,52 @@ test("a failing result subtype is named, a successful one is not", () => {
   const unknown = describeResultFailure({ type: "result", subtype: "error_from_a_future_cli" })
   assert.equal(unknown, "Claude Code ended the turn with `error_from_a_future_cli`.")
   assert.ok(formatResultFailureNote(known!).startsWith(`\n${RESULT_ERROR_MARKER} `))
+})
+
+// Verbatim from Claude Code 2.1.280 running `claude-sonnet-5-5` in the
+// plugin's own mode (`-p`, stream-json, verbose), 2026-09-30. A model the CLI
+// knows writes nothing to stderr at all.
+const UNRECOGNIZED_MODEL_LINE =
+  '[claude-code:unrecognized_model] {"model":"claude-sonnet-5-5","query_source":"sdk"}\n'
+
+test("the CLI's unrecognized_model stderr line names the model", () => {
+  assert.deepEqual(parseUnrecognizedModel(UNRECOGNIZED_MODEL_LINE), { model: "claude-sonnet-5-5" })
+  assert.deepEqual(
+    parseUnrecognizedModel(`some earlier output\n${UNRECOGNIZED_MODEL_LINE}`),
+    { model: "claude-sonnet-5-5" },
+    "found anywhere in a stderr chunk",
+  )
+  assert.deepEqual(
+    parseUnrecognizedModel("[claude-code:unrecognized_model] {not json"),
+    { model: undefined },
+    "a payload that does not parse still counts",
+  )
+  assert.equal(parseUnrecognizedModel("No conversation found with session ID: x"), null)
+  assert.equal(parseUnrecognizedModel(""), null)
+})
+
+test("an unrecognized model warns once per model per process, with the fix", () => {
+  _resetLoggerForTests()
+  _resetUnrecognizedModelReports()
+  configureLogger({ file: false, mode: "silent", level: "info" })
+
+  const first = captureStderr(() => reportUnrecognizedModel(UNRECOGNIZED_MODEL_LINE))
+  assert.equal(first.lines.length, 1, "the first sighting warns")
+  assert.match(first.lines[0], /does not recognise the model "claude-sonnet-5-5"/)
+  assert.match(first.lines[0], /200k/)
+  assert.match(first.lines[0], /2\.1\.284/, "names the release that added it")
+
+  const again = captureStderr(() => reportUnrecognizedModel(UNRECOGNIZED_MODEL_LINE))
+  assert.equal(again.lines.length, 0, "the CLI repeats it every turn; the warning does not")
+
+  const other = captureStderr(() =>
+    reportUnrecognizedModel('[claude-code:unrecognized_model] {"model":"claude-next-1"}'),
+  )
+  assert.equal(other.lines.length, 1, "a different model is its own warning")
+  assert.match(other.lines[0], /claude update/, "an unknown floor still says how to fix it")
+  assert.doesNotMatch(other.lines[0], /2\.1\.284/)
+
+  const unrelated = captureStderr(() => reportUnrecognizedModel("some other stderr"))
+  assert.equal(unrelated.lines.length, 0)
+  _resetLoggerForTests()
 })

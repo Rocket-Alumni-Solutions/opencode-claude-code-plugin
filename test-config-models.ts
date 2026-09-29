@@ -108,17 +108,20 @@ test("configModelsForProvider registers Sonnet 5 and Opus 5 metadata", () => {
   const models = configModelsForProvider({}, "claude-code")
 
   const sonnet = models["claude-sonnet-5"] as Record<string, unknown>
-  assert.equal(sonnet.name, "Claude Sonnet 5 (3×)")
+  assert.equal(sonnet.name, "Claude Sonnet 5 (2×)")
   assert.equal(sonnet.family, "sonnet")
   assert.equal(sonnet.release_date, "2026-06-30")
   assert.equal(sonnet.reasoning, true)
   assert.deepEqual(sonnet.limit, { context: 1_000_000, output: 128_000 })
-  // Dollars per million tokens, the unit opencode/models.dev expect.
+  // Dollars per million tokens, the unit opencode/models.dev expect. The
+  // introductory $2/$10 became the standard price; the $3/$15 increase
+  // scheduled for 2026-09-01 was cancelled (Anthropic's pricing page,
+  // re-read 2026-09-30).
   assert.deepEqual(sonnet.cost, {
-    input: 3,
-    output: 15,
-    cache_read: 0.3,
-    cache_write: 3.75,
+    input: 2,
+    output: 10,
+    cache_read: 0.2,
+    cache_write: 2.5,
   })
 
   const opus = models["claude-opus-5"] as Record<string, unknown>
@@ -136,6 +139,29 @@ test("configModelsForProvider registers Sonnet 5 and Opus 5 metadata", () => {
 
   assert.ok("max" in (sonnet.variants as Record<string, unknown>))
   assert.ok("max" in (opus.variants as Record<string, unknown>))
+})
+
+test("configModelsForProvider registers Sonnet 5.5 at its published metadata", () => {
+  // Anthropic's models overview and pricing pages, read 2026-09-30: released
+  // 2026-09-28, 1M context, 128K output, $2/$10, cache read $0.20, 5-minute
+  // cache write $2.50. Claude Code added it in 2.1.284.
+  const models = configModelsForProvider({}, "claude-code")
+  const sonnet = models["claude-sonnet-5-5"] as Record<string, unknown>
+  assert.ok(sonnet, "claude-sonnet-5-5 must be registered")
+  assert.equal(sonnet.name, "Claude Sonnet 5.5 (2×)")
+  assert.equal(sonnet.family, "sonnet")
+  assert.equal(sonnet.release_date, "2026-09-28")
+  assert.equal(sonnet.reasoning, true)
+  assert.deepEqual(sonnet.limit, { context: 1_000_000, output: 128_000 })
+  assert.deepEqual(sonnet.cost, {
+    input: 2,
+    output: 10,
+    cache_read: 0.2,
+    cache_write: 2.5,
+  })
+  assert.ok("max" in (sonnet.variants as Record<string, unknown>))
+  // Fast mode is Opus-only in the CLI, so no fast entry may exist for it.
+  assert.equal(models["claude-sonnet-5-5-fast"], undefined)
 })
 
 // Fast mode is only registered for the two models the CLI actually gates it
@@ -243,6 +269,7 @@ test("configModelsForProvider reports the published context and output limits", 
   for (const id of [
     "claude-sonnet-4-6",
     "claude-sonnet-5",
+    "claude-sonnet-5-5",
     "claude-opus-4-6",
     "claude-opus-4-7",
     "claude-opus-4-8",

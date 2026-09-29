@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { unlink } from "node:fs/promises"
 import { log } from "./logger.js"
+import { reportUnrecognizedModel } from "./cli-events.js"
 import { SERVER_CLOSED_MESSAGE, type ProxyMcpServer, type ProxyToolResult } from "./proxy-mcp.js"
 import {
   getPendingProxyCalls,
@@ -849,6 +850,9 @@ export function spawnClaudeProcess(
     const stderr = data.toString()
     log.debug("stderr", { data: stderr.slice(0, 200) })
     retainStderr(ap, stderr)
+    // A model the CLI has no catalog entry for still runs, on fallback limits,
+    // and this line is the only sign of it (src/cli-events.ts).
+    reportUnrecognizedModel(stderr)
 
     // "No conversation found with session ID: <uuid>" is what `--resume`
     // prints for a purged transcript — note the lowercase "session ID",

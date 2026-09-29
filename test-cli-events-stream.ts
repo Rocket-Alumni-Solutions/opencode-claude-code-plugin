@@ -17,12 +17,21 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { _resetRateLimitReports, _resetSystemInitReports } from "./src/cli-events.js"
+import {
+  _resetRateLimitReports,
+  _resetSystemInitReports,
+  _resetUnrecognizedModelReports,
+} from "./src/cli-events.js"
 import { createClaudeCode } from "./src/index.js"
 import { deleteActiveProcess, sessionKey } from "./src/session-manager.js"
 
-/** A fake `claude` that replays a fixed line sequence on the first stdin write. */
-function createFakeCli(lines: unknown[]) {
+/**
+ * A fake `claude` that replays a fixed line sequence on the first stdin write,
+ * optionally writing `stderrText` first. Stdout then waits a beat, because the
+ * two pipes are not ordered with each other and a stderr diagnostic has to be
+ * seen before the turn it belongs to finishes.
+ */
+function createFakeCli(lines: unknown[], stderrText = "") {
   const cwd = mkdtempSync(join(tmpdir(), "opencode-cli-events-"))
   const cliPath = join(cwd, "fake-claude.cjs")
   const source = `#!/usr/bin/env node
@@ -34,12 +43,18 @@ if (process.argv.includes("--version")) {
 }
 
 const LINES = ${JSON.stringify(lines)}
+const STDERR = ${JSON.stringify(stderrText)}
 const rl = readline.createInterface({ input: process.stdin })
 let answered = false
 rl.on("line", () => {
   if (answered) return
   answered = true
-  for (const line of LINES) process.stdout.write(JSON.stringify(line) + "\\n")
+  const replay = () => {
+    for (const line of LINES) process.stdout.write(JSON.stringify(line) + "\\n")
+  }
+  if (!STDERR) return replay()
+  process.stderr.write(STDERR)
+  setTimeout(replay, 100)
 })
 `
   writeFileSync(cliPath, source)
@@ -50,10 +65,12 @@ rl.on("line", () => {
 async function streamParts(
   lines: unknown[],
   settings: Record<string, unknown> = {},
+  stderrText = "",
 ): Promise<any[]> {
   _resetRateLimitReports()
   _resetSystemInitReports()
-  const fake = createFakeCli(lines)
+  _resetUnrecognizedModelReports()
+  const fake = createFakeCli(lines, stderrText)
   const modelId = "claude-test-cli-events"
   const sk = sessionKey(
     fake.cwd,
@@ -196,6 +213,27 @@ test("an MCP entry the CLI skipped warns through a real doStream and changes not
   assert.equal(body, "hello")
   const finish = parts.find((part) => part.type === "finish")
   assert.equal(finish.finishReason.unified, "stop")
+})
+
+test("a model the CLI does not recognise warns through a real doStream and changes nothing else", async () => {
+  // The line Claude Code 2.1.280 writes for `claude-sonnet-5-5` (2026-09-30).
+  const captured = await captureStderr(() =>
+    streamParts(
+      [init, text("hello"), endTurn, successResult],
+      {},
+      '[claude-code:unrecognized_model] {"model":"claude-sonnet-5-5","query_source":"sdk"}\n',
+    ),
+  )
+
+  const warning = captured.lines.join("")
+  assert.match(warning, /does not recognise the model "claude-sonnet-5-5"/)
+  const parts = captured.value
+  const body = parts
+    .filter((part) => part.type === "text-delta")
+    .map((part) => part.delta)
+    .join("")
+  assert.equal(body, "hello", "the turn itself is untouched")
+  assert.equal(parts.find((part) => part.type === "finish").finishReason.unified, "stop")
 })
 
 test("a CLI tool that failed reaches opencode flagged as an error", async () => {
