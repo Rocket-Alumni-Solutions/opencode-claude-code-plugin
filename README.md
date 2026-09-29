@@ -890,6 +890,8 @@ It carries the startup-diagnostics fields (plugin version, opencode version, `cl
 
 When Claude Code refused an entry in an `--mcp-config` it was handed, an **MCP config entries Claude Code skipped** section names each one with the CLI's own category and sentence. That section only appears when there is something in it. It matters because a skipped server is absent from the CLI's server list entirely rather than listed as broken, so the model silently does not have those tools; if the skipped name is `opencode_proxy` the report says so plainly, because then it is the plugin's own server and every proxied tool call in the session fails. The same thing is a warning in your terminal when it happens.
 
+A **Plugins Claude Code did not load** section works the same way for Claude plugins: one the CLI demoted at load time (for example, a dependency that is not installed) is absent from its plugin list, so its skills, commands and MCP servers are silently missing. The skill bridge is such a plugin (`opencode-skills`), and a failure there is reported as the plugin's own bug rather than your config. A plugin warning only counts when its content did not load; advisory feedback about a plugin that did load stays in the log at INFO.
+
 ```text
 /claude-code-doctor usage
 ```

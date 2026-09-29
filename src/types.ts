@@ -609,6 +609,14 @@ export const DEFAULT_PROXY_TOOL_NAMES = [
  */
 export const PROXY_MCP_SERVER_NAME = "opencode_proxy"
 
+/**
+ * The name of the throwaway Claude plugin the skill bridge stages, and
+ * therefore the `<plugin>:<skill>` prefix Claude assigns. Here rather than in
+ * `skill-bridge.ts` for the same cycle reason as `PROXY_MCP_SERVER_NAME`:
+ * `cli-events.ts` recognises it in the CLI's `plugin_errors`.
+ */
+export const SKILL_PLUGIN_NAME = "opencode-skills"
+
 export interface ClaudeCodeCallOptions {
   reasoningEffort?: ReasoningEffort
 }

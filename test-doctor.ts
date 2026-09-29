@@ -74,6 +74,7 @@ const report: DoctorReport = {
   ],
   proxyServers: [{ url: "http://127.0.0.1:51234/mcp", auth: { status: "ok", code: 401 } }],
   mcpServerErrors: [],
+  pluginLoadFailures: [],
   planUsage: { status: "not-requested" },
 }
 
@@ -121,6 +122,20 @@ test("skipped MCP entries get their own section, and only when there are some", 
   assert.ok(text.includes("**MCP config entries Claude Code skipped**"), text)
   assert.ok(text.includes("| github | `url_missing_type` | Skipped - no type |"), text)
   assert.ok(text.includes("| opencode_proxy | `invalid_config` | no detail |"), text)
+})
+
+test("plugins Claude Code did not load get their own section, and only when there are some", () => {
+  assert.equal(formatDoctorReport(report).includes("did not load"), false)
+  const text = formatDoctorReport({
+    ...report,
+    pluginLoadFailures: [
+      { kind: "error", plugin: "probe-dep@inline", type: "dependency-unsatisfied", message: "Dependency missing" },
+      { kind: "warning", plugin: "workspace@settings", type: "suppressed", message: "" },
+    ],
+  })
+  assert.ok(text.includes("**Plugins Claude Code did not load**"), text)
+  assert.ok(text.includes("| probe-dep@inline | error | `dependency-unsatisfied` | Dependency missing |"), text)
+  assert.ok(text.includes("| workspace@settings | warning | `suppressed` | no detail |"), text)
 })
 
 test("plan usage is off unless asked for, and says how to ask", () => {

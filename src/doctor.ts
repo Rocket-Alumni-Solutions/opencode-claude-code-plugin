@@ -1,5 +1,10 @@
 import { detectCliVersion } from "./cli-version.js"
-import { snapshotMcpServerErrors, type McpServerError } from "./cli-events.js"
+import {
+  snapshotMcpServerErrors,
+  snapshotPluginLoadFailures,
+  type McpServerError,
+  type PluginLoadFailure,
+} from "./cli-events.js"
 import { log } from "./logger.js"
 import { fetchPlanUsage, wantsPlanUsage, type PlanUsage } from "./plan-usage.js"
 import {
@@ -126,6 +131,8 @@ export interface DoctorReport {
   proxyServers: DoctorProxyRow[]
   /** `--mcp-config` entries Claude Code skipped this process. */
   mcpServerErrors: McpServerError[]
+  /** Claude plugins (the skill bridge's included) that did not load this process. */
+  pluginLoadFailures: PluginLoadFailure[]
   /** The CLI's own plan-usage report, only when `usage` was asked for. */
   planUsage: PlanUsage
 }
@@ -276,6 +283,21 @@ export function formatDoctorReport(report: DoctorReport): string {
     lines.push("A skipped server is missing from the model's tools with no other sign of it.")
   }
 
+  // The same rule for plugins: a demoted one is absent from the CLI's
+  // `plugins[]`, and the skill bridge is one of them.
+  if (report.pluginLoadFailures.length > 0) {
+    lines.push("")
+    lines.push("**Plugins Claude Code did not load**")
+    lines.push("")
+    lines.push("| plugin | kind | category | Claude Code said |")
+    lines.push("|---|---|---|---|")
+    for (const failure of report.pluginLoadFailures) {
+      lines.push(
+        `| ${failure.plugin} | ${failure.kind} | \`${failure.type}\` | ${failure.message || "no detail"} |`,
+      )
+    }
+  }
+
   lines.push("")
   lines.push("**Plan usage**")
   lines.push("")
@@ -421,6 +443,7 @@ export async function gatherDoctorReport(
     pendingCalls: snapshotPendingProxyCalls(),
     proxyServers,
     mcpServerErrors: snapshotMcpServerErrors(),
+    pluginLoadFailures: snapshotPluginLoadFailures(),
     planUsage,
   }
 }
@@ -437,6 +460,7 @@ export async function buildDoctorReport(options: GatherDoctorOptions): Promise<s
       pendingCalls: report.pendingCalls.length,
       proxyServers: report.proxyServers.map((server) => server.auth.status),
       mcpServerErrors: report.mcpServerErrors.length,
+      pluginLoadFailures: report.pluginLoadFailures.length,
       planUsage: report.planUsage.status,
     })
     return formatDoctorReport(report)

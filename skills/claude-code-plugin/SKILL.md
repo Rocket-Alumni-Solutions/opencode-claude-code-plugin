@@ -669,6 +669,12 @@ missing: a skipped server is absent from the CLI's server list rather than liste
 broken, so nothing else hints at it. A skipped `opencode_proxy` is the plugin's own
 server, not the user's config, and means every proxied tool call in the session fails.
 
+A **Plugins Claude Code did not load** section appears the same way, only when the CLI
+demoted a Claude plugin at load time (`plugin_errors`, e.g. `dependency-unsatisfied`) or
+warned about content that did not load. Read it whenever bridged skills are missing: an
+`opencode-skills@...` row is the skill bridge itself, which is a plugin bug to report,
+not something to fix in the user's config.
+
 `/claude-code-doctor usage` adds a **Plan usage** section: the CLI's own `/cost` answer
 (subscription vs API key, 5-hour and 7-day window use, reset times, what is driving
 them). Measured free on 2.1.280 (`num_turns: 0`, `$0`, no API call), so suggest it for

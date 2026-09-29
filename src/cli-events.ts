@@ -1,5 +1,5 @@
 import { log } from "./logger.js"
-import { PROXY_MCP_SERVER_NAME, type ClaudeStreamMessage } from "./types.js"
+import { PROXY_MCP_SERVER_NAME, SKILL_PLUGIN_NAME, type ClaudeStreamMessage } from "./types.js"
 
 /**
  * Claude CLI stream events the plugin used to drop on the floor.
@@ -238,6 +238,37 @@ export interface SystemInitInfo {
   mcpServers: Array<{ name: string; status: string }>
   /** `--mcp-config` entries the CLI refused. Empty when the key was omitted. */
   mcpServerErrors: McpServerError[]
+  /** Plugins the CLI demoted at load time. Empty when the key was omitted. */
+  pluginErrors: PluginDiagnostic[]
+  /** Plugin authoring feedback. Empty when the key was omitted. */
+  pluginWarnings: PluginDiagnostic[]
+  /** Every `plugins[]` entry's `source` and `name`, to tell an advisory warning apart. */
+  loadedPlugins: string[]
+}
+
+/**
+ * One entry of the init frame's optional `plugin_errors` or `plugin_warnings`,
+ * `{plugin, type, message}` in both. Read out of the CLI's zod schema on
+ * 2.1.280 (`rg -a -o 'plugin_errors:[^;]{0,900}'`):
+ *
+ *   - `plugin_errors`: "Plugin load-time errors (e.g., unsatisfied dependency
+ *     version). Affected plugins are demoted and absent from `plugins[]`."
+ *   - `plugin_warnings`: "When `plugin` matches an entry in `plugins[]`, that
+ *     plugin loaded and the warning is advisory; warnings with a synthetic
+ *     `plugin` source (no matching `plugins[]` entry ...) describe content
+ *     that did NOT load."
+ *
+ * Measured the same day with a `--plugin-dir` whose manifest names a
+ * dependency that is not installed: `{"plugin":"probe-dep@inline","type":
+ * "dependency-unsatisfied","message":"Dependency ... is not installed ..."}`.
+ * `plugin` is `name@source`, the form a loaded entry carries in `source`.
+ * The skill bridge stages such a plugin dir, so a bridged skill that fails to
+ * load used to disappear with no trace at all.
+ */
+export interface PluginDiagnostic {
+  plugin: string
+  type: string
+  message: string
 }
 
 /**
@@ -350,7 +381,59 @@ export function parseSystemInit(msg: ClaudeStreamMessage): SystemInitInfo | null
     toolCount: Array.isArray(raw.tools) ? raw.tools.length : 0,
     mcpServers: servers,
     mcpServerErrors: parseMcpServerErrors(msg),
+    pluginErrors: parsePluginDiagnostics(raw.plugin_errors),
+    pluginWarnings: parsePluginDiagnostics(raw.plugin_warnings),
+    loadedPlugins: parseLoadedPlugins(raw.plugins),
   }
+}
+
+function parsePluginDiagnostics(raw: unknown): PluginDiagnostic[] {
+  if (!Array.isArray(raw)) return []
+  const diagnostics: PluginDiagnostic[] = []
+  for (const entry of raw) {
+    if (!isRecord(entry)) continue
+    diagnostics.push({
+      plugin: str(entry.plugin) ?? "unknown",
+      type: str(entry.type) ?? "unknown",
+      message: str(entry.message) ?? "",
+    })
+  }
+  return diagnostics
+}
+
+function parseLoadedPlugins(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const loaded: string[] = []
+  for (const entry of raw) {
+    if (!isRecord(entry)) continue
+    for (const id of [str(entry.source), str(entry.name)]) {
+      if (id && !loaded.includes(id)) loaded.push(id)
+    }
+  }
+  return loaded
+}
+
+/**
+ * What to tell the user about a plugin that did not load. The bridge's own
+ * plugin gets its own sentence for the reason `opencode_proxy` does in
+ * `describeMcpServerError`: the plugin writes that directory, so it is never
+ * the user's config to fix.
+ */
+export function describePluginLoadFailure(diagnostic: PluginDiagnostic): string {
+  const detail = diagnostic.message ? ` Claude Code said: ${diagnostic.message}` : ""
+  const name = diagnostic.plugin.split("@", 1)[0]
+  if (name === SKILL_PLUGIN_NAME) {
+    return (
+      `Claude Code did not load the plugin's own skill bridge "${diagnostic.plugin}" ` +
+      `(${diagnostic.type}), so the opencode skills it bridges are missing this session. ` +
+      "This is a plugin bug or a corrupted scratch directory rather than your config: " +
+      `report it with this line.${detail}`
+    )
+  }
+  return (
+    `Claude Code did not load plugin "${diagnostic.plugin}" (${diagnostic.type}), so its ` +
+    `skills, commands and MCP servers are missing this session.${detail}`
+  )
 }
 
 /**
@@ -388,17 +471,60 @@ const warnedMcpSkips = new Set<string>()
  */
 const lastMcpServerErrors = new Map<string, McpServerError>()
 
+/** A plugin diagnostic that means something did not load, for the doctor. */
+export interface PluginLoadFailure extends PluginDiagnostic {
+  kind: "error" | "warning"
+}
+
+const warnedPluginDiagnostics = new Set<string>()
+/** Newest wins per plugin, like `lastMcpServerErrors`, for `/claude-code-doctor`. */
+const lastPluginLoadFailures = new Map<string, PluginLoadFailure>()
+
 /** Test-only. */
 export function _resetSystemInitReports(): void {
   warnedApiKeySources.clear()
   warnedMcpFailures.clear()
   warnedMcpSkips.clear()
   lastMcpServerErrors.clear()
+  warnedPluginDiagnostics.clear()
+  lastPluginLoadFailures.clear()
 }
 
 /** Read-only view for the doctor. Never touches the dedup sets. */
 export function snapshotMcpServerErrors(): McpServerError[] {
   return [...lastMcpServerErrors.values()]
+}
+
+/** Read-only view for the doctor. Never touches the dedup sets. */
+export function snapshotPluginLoadFailures(): PluginLoadFailure[] {
+  return [...lastPluginLoadFailures.values()]
+}
+
+/**
+ * WARN once per `kind:plugin:type` per process for everything that did not
+ * load: every `plugin_errors` entry, and a `plugin_warnings` entry whose plugin
+ * is not in `plugins[]`. A warning about a plugin that did load is advisory
+ * authoring feedback and stays at INFO.
+ */
+function reportPluginDiagnostics(info: SystemInitInfo): void {
+  const report = (kind: PluginLoadFailure["kind"], diagnostic: PluginDiagnostic) => {
+    const loaded = kind === "warning" && info.loadedPlugins.includes(diagnostic.plugin)
+    const message = loaded
+      ? `Claude Code has advisory feedback for plugin "${diagnostic.plugin}" (${diagnostic.type}): ${diagnostic.message}`
+      : describePluginLoadFailure(diagnostic)
+    if (!loaded) lastPluginLoadFailures.set(diagnostic.plugin, { kind, ...diagnostic })
+    const key = `${kind}:${diagnostic.plugin}:${diagnostic.type}`
+    const data = { plugin: diagnostic.plugin, type: diagnostic.type, kind }
+    if (warnedPluginDiagnostics.has(key)) {
+      log.debug(message, data)
+      return
+    }
+    warnedPluginDiagnostics.add(key)
+    if (loaded) log.info(message, data)
+    else log.warn(message, data)
+  }
+  for (const diagnostic of info.pluginErrors) report("error", diagnostic)
+  for (const diagnostic of info.pluginWarnings) report("warning", diagnostic)
 }
 
 /**
@@ -421,7 +547,11 @@ export function reportSystemInit(
     tools: info.toolCount,
     mcpServers: info.mcpServers,
     mcpServerErrors: info.mcpServerErrors,
+    pluginErrors: info.pluginErrors,
+    pluginWarnings: info.pluginWarnings,
   })
+
+  reportPluginDiagnostics(info)
 
   // A skipped entry first, because it is the one failure mode with no other
   // trace: the server is missing from `mcp_servers` rather than listed broken.

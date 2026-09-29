@@ -32,6 +32,7 @@ import {
   parseSystemInit,
   parseUnrecognizedModel,
   reportUnrecognizedModel,
+  snapshotPluginLoadFailures,
   rateLimitKey,
   reportCompactBoundary,
   reportRateLimitEvent,
@@ -431,5 +432,90 @@ test("an unrecognized model warns once per model per process, with the fix", () 
 
   const unrelated = captureStderr(() => reportUnrecognizedModel("some other stderr"))
   assert.equal(unrelated.lines.length, 0)
+  _resetLoggerForTests()
+})
+
+// The init fields Claude Code 2.1.280 sent with two `--plugin-dir`s, one of
+// them declaring a dependency that is not installed (2026-09-30). The demoted
+// plugin is absent from `plugins[]`; a diagnostic names a plugin as
+// `name@source`, which is what a loaded entry carries in `source`.
+const pluginInit = {
+  type: "system",
+  subtype: "init",
+  session_id: "s",
+  tools: [],
+  mcp_servers: [],
+  plugins: [{ name: "probe-shadow", path: "/tmp/plugprobe/shadow", source: "probe-shadow@inline" }],
+  plugin_errors: [
+    {
+      plugin: "probe-dep@inline",
+      type: "dependency-unsatisfied",
+      message:
+        'Dependency "no-such-plugin-xyz" is not installed \u2014 run `claude plugin install no-such-plugin-xyz`, or check that its marketplace is added',
+    },
+  ],
+} as unknown as ClaudeStreamMessage
+
+test("parseSystemInit reads plugin errors, warnings and the plugins that loaded", () => {
+  const info = parseSystemInit(pluginInit)!
+  assert.deepEqual(info.pluginErrors.map((d) => [d.plugin, d.type]), [
+    ["probe-dep@inline", "dependency-unsatisfied"],
+  ])
+  assert.deepEqual(info.pluginWarnings, [], "an omitted key is no warnings")
+  assert.deepEqual(info.loadedPlugins, ["probe-shadow@inline", "probe-shadow"])
+
+  const clean = parseSystemInit(init)!
+  assert.deepEqual(clean.pluginErrors, [])
+  assert.deepEqual(clean.loadedPlugins, [])
+})
+
+test("a plugin that did not load warns once; an advisory warning for a loaded one does not", () => {
+  _resetLoggerForTests()
+  _resetSystemInitReports()
+  configureLogger({ file: false, mode: "silent", level: "info" })
+
+  const first = captureStderr(() => reportSystemInit(pluginInit))
+  const failed = first.lines.filter((line) => line.includes("did not load"))
+  assert.equal(failed.length, 1, first.lines.join("\n"))
+  assert.match(failed[0], /plugin "probe-dep@inline" \(dependency-unsatisfied\)/)
+  assert.match(failed[0], /no-such-plugin-xyz/, "Claude Code's own sentence is kept")
+
+  const again = captureStderr(() => reportSystemInit(pluginInit))
+  assert.equal(again.lines.filter((line) => line.includes("did not load")).length, 0)
+
+  // The schema: a warning whose plugin loaded is advisory; one with no match
+  // in `plugins[]` describes content that did NOT load.
+  const withWarnings = {
+    ...(pluginInit as object),
+    plugin_errors: undefined,
+    plugin_warnings: [
+      { plugin: "probe-shadow@inline", type: "folder-shadowed", message: "skills/ is shadowed" },
+      { plugin: "workspace@settings", type: "suppressed", message: "suppressed by policy" },
+    ],
+  } as unknown as ClaudeStreamMessage
+  const warned = captureStderr(() => reportSystemInit(withWarnings))
+  const loudWarnings = warned.lines.filter((line) => line.includes("did not load"))
+  assert.equal(loudWarnings.length, 1, "only the warning whose content did not load")
+  assert.match(loudWarnings[0], /workspace@settings/)
+  assert.equal(warned.lines.some((line) => line.includes("probe-shadow")), false)
+
+  // The bridge's own plugin is never the user's to fix.
+  const bridge = captureStderr(() =>
+    reportSystemInit({
+      ...(pluginInit as object),
+      plugin_errors: [{ plugin: "opencode-skills@inline", type: "invalid-manifest", message: "bad" }],
+    } as unknown as ClaudeStreamMessage),
+  )
+  const bridgeLine = bridge.lines.find((line) => line.includes("opencode-skills"))
+  assert.ok(bridgeLine, bridge.lines.join("\n"))
+  assert.match(bridgeLine!, /skill bridge/)
+  assert.match(bridgeLine!, /report it/)
+
+  const kept = snapshotPluginLoadFailures().map((d) => `${d.kind}:${d.plugin}`)
+  assert.deepEqual(kept.sort(), [
+    "error:opencode-skills@inline",
+    "error:probe-dep@inline",
+    "warning:workspace@settings",
+  ])
   _resetLoggerForTests()
 })

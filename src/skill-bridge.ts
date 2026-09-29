@@ -7,6 +7,7 @@ import { expandHome } from "./accounts.js"
 import { detectCliSupportsFlag } from "./cli-version.js"
 import { log } from "./logger.js"
 import { pluginTmpDir } from "./tmp.js"
+import { SKILL_PLUGIN_NAME } from "./types.js"
 
 /**
  * Bridge opencode skills into Claude Code's native Skill tool.
@@ -60,7 +61,7 @@ import { pluginTmpDir } from "./tmp.js"
  */
 
 /** Plugin name, and therefore the `<plugin>:<skill>` prefix Claude assigns. */
-export const SKILL_PLUGIN_NAME = "opencode-skills"
+export { SKILL_PLUGIN_NAME }
 
 /**
  * Skills shipped inside this package, at `<package>/skills/<name>/SKILL.md`.
