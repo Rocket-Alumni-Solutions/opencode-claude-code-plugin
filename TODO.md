@@ -106,8 +106,8 @@ Nothing parked.
   to $2/$10 (the $3/$15 increase was cancelled). The per-agent `cacheTtl` from 0.30.0 was
   live-verified end to end (5m writes under `cacheTtl: 5m`, 1h otherwise). 907 tests.
   Follow-ups: the interactive transport sums `output_tokens` per transcript record (#63's
-  note, needs a Bun run); `plugin_errors`/`plugin_warnings` on init (#60's note); the
-  account-failover switch still awaits a real limit.
+  note, needs a Bun run); the account-failover switch still awaits a real limit.
+  `plugin_errors`/`plugin_warnings` on init shipped in v0.31.1 the same day (#g171).
 - 2026-09-28: **done** (v0.29.2, v0.30.0). v0.29.2: the first real usage limit showed the
   account-failover form still could not switch (opencode's answer ends in a newline, the
   unwrapper wanted an exact suffix); both live picks were logged as `unrecognised answer`.
