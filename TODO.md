@@ -74,6 +74,14 @@ them ran in this directory.
 
 ## Open from you
 
+- 2026-09-30: found by the interactive-usage lane (PR #65), pre-existing, not fixed, awaiting a
+  now/later/drop: (1) every interactive-transport turn finishes as an error, because the
+  synthesized `result` uses `subtype: "end_turn"` and a non-`success` subtype is a failure since
+  #g113 (it also suppresses `turnStats`); (2) `ClaudeSession` resolves a `/tmp` cwd to a transcript
+  path the CLI never writes (`/private/tmp` on macOS). Both in `docs/agents-history.md` #g174.
+- 2026-09-30: background-subagents follow-ups (PR #66): `task_status`/`task_cancel` on opencode 2
+  need the V1 client shim to expose `session.messages`/`session.abort`; no doctor section yet.
+
 Questions the maintainer still owes an answer on. Written here the turn they are
 raised, so they survive context compaction; removed when answered, done or dropped.
 
@@ -97,6 +105,13 @@ Nothing parked.
 
 ## Done
 
+- 2026-09-30: **done** (v0.32.0), two implementor lanes as asked ("do 1 background agents in 1 lane
+  and 2 small follow up in another"). PR #66: background subagents are opencode's own (`task`
+  `background: true`, gated on 1.x by `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`); the plugin
+  reads the gate off the live schema and adds `task_status` / `task_cancel`. At merge the parent
+  guard was changed to fail closed (it allowed any id when the turn had no session id). PR #65:
+  the interactive transport counts each API call once by message id (transcript records carry
+  the final usage, unlike stream frames). 939 tests, both live-verified.
 - 2026-09-30: **done** (v0.31.0). Two contributor PRs for the same bug (turn-summed usage
   made opencode auto-compact early): #63 (@broskees) merged after its three claims were
   measured against the real CLI and an A/B through opencode (193,659 vs 39,681 stored tokens);
