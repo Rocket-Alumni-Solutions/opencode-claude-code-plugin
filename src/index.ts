@@ -778,7 +778,7 @@ export default {
   setup: createV2Setup({
     createProvider: createClaudeCode,
     defaultProxyTools: DEFAULT_PROXY_TOOL_NAMES,
-    loadConfig: loadMergedOpencodeConfig,
+    loadConfig: (directory) => loadMergedOpencodeConfig(directory, "v2"),
     buildAgentRegistry: (config) => buildAgentRegistry(config as OpenCodeConfig),
   }),
 }

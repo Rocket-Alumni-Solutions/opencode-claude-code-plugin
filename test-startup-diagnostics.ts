@@ -19,6 +19,34 @@ test("pluginVersion reads the real package manifest", () => {
   assert.match(version, /^\d+\.\d+\.\d+/)
 })
 
+test("V2 startup/doctor diagnostics name real servers without credential values", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "oc-v2-diagnostics-"))
+  const saved = Object.fromEntries(["XDG_CONFIG_HOME", "HOME", "OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_WORKTREE"].map(k => [k, process.env[k]]))
+  process.env.XDG_CONFIG_HOME = root
+  process.env.HOME = root
+  delete process.env.OPENCODE_CONFIG
+  delete process.env.OPENCODE_CONFIG_DIR
+  delete process.env.OPENCODE_WORKTREE
+  try {
+    fs.mkdirSync(path.join(root, "opencode"))
+    fs.writeFileSync(path.join(root, "opencode/opencode.json"), JSON.stringify({
+      mcp: { servers: {
+        github: { type: "remote", url: "https://example.test", headers: { Authorization: "fixture-not-a-real-credential" } },
+        off: { type: "remote", url: "https://example.test", disabled: true },
+      } },
+    }))
+    const result = collectStartupDiagnostics({ "claude-code": { options: { cwd: root } } }, "2.0.18")
+    assert.deepEqual(result.mcpServers, ["github"])
+    assert.doesNotMatch(JSON.stringify(result), /fixture-not-a-real-credential|Authorization|example\.test/)
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test("describeSpawnCwd reports which branch resolveSpawnCwd would take", () => {
   assert.deepEqual(describeSpawnCwd("/pinned", "/live", "/captured"), {
     resolved: "/pinned",

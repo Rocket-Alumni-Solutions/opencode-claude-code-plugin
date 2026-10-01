@@ -29,6 +29,39 @@ import {
 import { buildAppendedSystemPrompt } from "./src/claude-code-language-model.js"
 import { DEFAULT_PROXY_TOOL_NAMES } from "./src/index.js"
 import { deleteClaudeSessionId, setClaudeSessionId } from "./src/session-manager.js"
+import { codeModeProxyHint } from "./src/prompts.js"
+
+const executeTool = {
+  type: "function",
+  name: "execute",
+  description: "Execute code using the supplied catalog and search function.",
+  inputSchema: { type: "object", properties: { code: { type: "string" } }, required: ["code"], additionalProperties: false },
+}
+
+test("Code Mode execute uses the per-turn schema without a registry entry", () => {
+  const defs = resolveProxyOpencodeToolDefs({ requested: ["EXECUTE"], modelTools: [executeTool] })
+  assert.deepEqual(defs, [{ name: "execute", description: executeTool.description, inputSchema: executeTool.inputSchema }])
+  assert.deepEqual(resolveProxyOpencodeToolDefs({ modelTools: [executeTool] }), [], "explicit opt-in only")
+  assert.deepEqual(resolveProxyOpencodeToolDefs({ requested: ["execute"], items: [{ id: "execute", parameters: {} }] }), [], "no fabricated V2 schema")
+})
+
+test("V2 model snapshot is authoritative over registry tools and permissions", () => {
+  const items = [{ id: "execute", parameters: {} }, { id: "hidden", parameters: { type: "object" } }]
+  const defs = resolveProxyOpencodeToolDefs({ requested: ["execute", "hidden"], items, modelTools: [executeTool] })
+  assert.deepEqual(defs.map((t) => t.name), ["execute"])
+  assert.deepEqual(resolveProxyOpencodeToolDefs({ requested: ["execute"], items, modelTools: [] }), [])
+  assert.deepEqual(resolveProxyOpencodeToolDefs({ requested: ["execute"], modelTools: [{ ...executeTool, type: "provider-defined" }] }), [])
+  assert.deepEqual(resolveProxyOpencodeToolDefs({ requested: ["execute"], modelTools: [executeTool], taken: new Set(["execute"]) }), [])
+  assert.deepEqual(resolveProxyOpencodeToolDefs({ requested: ["execute"], modelTools: [executeTool], allowCodeExecution: false }), [], "read-only never forwards a code runner")
+})
+
+test("Code Mode prompt names the full proxy and does not advertise an absent execute", () => {
+  assert.match(codeModeProxyHint(true), /select:mcp__opencode_proxy__execute/)
+  assert.match(codeModeProxyHint(true), /search\(\.\.\.\)/)
+  assert.match(codeModeProxyHint(false), /does not expose an execute proxy/)
+  assert.match(codeModeProxyHint(false), /ToolSearch/)
+  assert.doesNotMatch(codeModeProxyHint(false), /select:mcp__opencode_proxy__execute/)
+})
 
 /** The proxy endpoint requires a bearer token; see test-proxy-mcp.ts. */
 function post(

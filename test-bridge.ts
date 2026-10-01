@@ -14,7 +14,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
 
-import { bridgeOpencodeMcp, __test } from "./src/mcp-bridge.js"
+import { bridgeOpencodeMcp, mergeOpencodeMcp, loadMergedOpencodeConfig, __test } from "./src/mcp-bridge.js"
 import { defaultModels, toConfigModel } from "./src/models.js"
 
 const {
@@ -65,6 +65,90 @@ test("deepMerge replaces primitives, deep-merges objects, replaces arrays", () =
     { a: 9, b: { y: 99, z: 3 }, c: [3] },
   )
   assert.deepEqual(out, { a: 9, b: { x: 1, y: 99, z: 3 }, c: [3] })
+})
+
+test("V2 extracts mcp.servers, not the servers container or timeout defaults", async () => {
+  await withIsolatedEnv((root) => {
+    writeJson(path.join(root, "opencode/opencode.json"), {
+      mcp: {
+        timeout: { startup: 1000 },
+        servers: {
+          github: { type: "remote", url: "https://example.test/mcp" },
+          local: { type: "local", command: ["fixture", "--stdio"], environment: { TEST: "value" } },
+          off: { type: "remote", url: "https://off.test/mcp", disabled: true },
+        },
+      },
+    })
+    const cwd = path.join(root, "project")
+    fs.mkdirSync(cwd)
+    const merged = mergeOpencodeMcp(cwd, undefined, "v2")
+    assert.deepEqual(merged.enabledServerNames, ["github", "local"])
+    const bridged = bridgeOpencodeMcp(cwd, undefined, undefined, "v2")!
+    const body = JSON.parse(fs.readFileSync(bridged.path, "utf8"))
+    assert.deepEqual(Object.keys(body.mcpServers), ["github", "local"])
+    assert.deepEqual(body.mcpServers.local, { type: "stdio", command: "fixture", args: ["--stdio"], env: { TEST: "value" } })
+    assert.equal(fs.statSync(bridged.path).mode & 0o777, 0o600)
+    const connected = mergeOpencodeMcp(cwd, { off: "connected", github: "needs_auth" }, "v2")
+    assert.deepEqual(connected.enabledServerNames, ["local", "off"])
+    assert.notEqual(connected.hash, merged.hash)
+    const disabled = mergeOpencodeMcp(cwd, { off: "disabled", local: "failed" }, "v2")
+    assert.deepEqual(disabled.enabledServerNames, ["github"])
+  })
+})
+
+test("V2 replaces servers across documents including global JSON/JSONC", async () => {
+  await withIsolatedEnv((root) => {
+    writeJson(path.join(root, "opencode/opencode.json"), {
+      mcp: { servers: { github: { type: "remote", url: "https://old.test", headers: { SECRET: "fixture-only" } } } },
+    })
+    writeJson(path.join(root, "opencode/opencode.jsonc"), {
+      mcp: { servers: { github: { type: "remote", url: "https://new.test" } } },
+    })
+    const cwd = path.join(root, "project")
+    fs.mkdirSync(cwd)
+    assert.deepEqual(mergeOpencodeMcp(cwd, undefined, "v2").servers.github, { type: "remote", url: "https://new.test" })
+    writeJson(path.join(cwd, "opencode.json"), {
+      mcp: { servers: { github: { disabled: true } } },
+    })
+    const merged = mergeOpencodeMcp(cwd, undefined, "v2")
+    assert.deepEqual(merged.servers.github, { disabled: true, enabled: false })
+    assert.deepEqual(merged.enabledServerNames, [])
+    assert.equal(bridgeOpencodeMcp(cwd, undefined, undefined, "v2"), null)
+    assert.deepEqual((loadMergedOpencodeConfig(cwd, "v2").mcp as any).servers.github, { disabled: true, enabled: false })
+  })
+})
+
+test("V2 walks above the repo and nearest .opencode overrides all direct layers", async () => {
+  await withIsolatedEnv((root) => {
+    const repo = path.join(root, "repo")
+    const cwd = path.join(repo, "pkg")
+    fs.mkdirSync(path.join(repo, ".git"), { recursive: true })
+    fs.mkdirSync(cwd)
+    const config = (url: string) => ({ mcp: { servers: { github: { type: "remote", url } } } })
+    writeJson(path.join(root, "opencode.json"), config("ancestor"))
+    assert.equal((mergeOpencodeMcp(cwd, undefined, "v2").servers.github as any).url, "ancestor")
+    assert.deepEqual(mergeOpencodeMcp(cwd).enabledServerNames, [], "V1 still stops at repo")
+    writeJson(path.join(cwd, "opencode.json"), config("nearest-direct"))
+    writeJson(path.join(repo, ".opencode/opencode.json"), config("parent-dot"))
+    assert.equal((mergeOpencodeMcp(cwd, undefined, "v2").servers.github as any).url, "parent-dot")
+    writeJson(path.join(cwd, ".opencode/opencode.json"), config("nearest-dot"))
+    assert.equal((mergeOpencodeMcp(cwd, undefined, "v2").servers.github as any).url, "nearest-dot")
+  })
+})
+
+test("V1 server named servers is not mistaken for a V2 container", () => {
+  assert.deepEqual(__test.extractMcpBlock({ mcp: { servers: { type: "local", command: ["fixture"] } } }), {
+    servers: { type: "local", command: ["fixture"] },
+  })
+  assert.deepEqual(__test.extractMcpBlock({ mcp: { servers: { enabled: false } } }), {
+    servers: { enabled: false },
+  })
+  assert.deepEqual(__test.extractMcpBlock({ mcp: { servers: { type: { type: "local", command: ["fixture"] } } } }), {
+    type: { type: "local", command: ["fixture"] },
+  })
+  for (const mcp of [null, [], "invalid", { servers: null }, { servers: [] }, { timeout: { startup: 1000 } }]) {
+    assert.deepEqual(__test.extractMcpBlock({ mcp }), {})
+  }
 })
 
 test("toConfigModel omits unsupported interleaved field", () => {

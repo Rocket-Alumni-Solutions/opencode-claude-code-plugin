@@ -257,7 +257,8 @@ function plainObject(value: unknown): Record<string, unknown> | undefined {
  * seed record). So it is read from the same on-disk layers opencode reads.
  *
  * Both config shapes are accepted, because V2 promises to keep reading V1
- * files: V1's `options` and V2's `settings`, the latter winning. The V2-native
+ * files: V1's `provider.options` and V2's `providers.settings`, the latter
+ * winning (also accept `provider.settings`). The V2-native
  * home for plugin-level settings, the plugin's own `options` in the `plugins`
  * array, wins over both.
  */
@@ -266,9 +267,11 @@ export function configuredSeedSettings(
   pluginOptions: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
   const provider = plainObject(plainObject(config.provider)?.[BASE_PROVIDER_ID])
+  const nativeProvider = plainObject(plainObject(config.providers)?.[BASE_PROVIDER_ID])
   return {
     ...(plainObject(provider?.options) ?? {}),
     ...(plainObject(provider?.settings) ?? {}),
+    ...(plainObject(nativeProvider?.settings) ?? {}),
     ...(pluginOptions ?? {}),
   }
 }

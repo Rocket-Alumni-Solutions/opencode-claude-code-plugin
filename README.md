@@ -470,7 +470,7 @@ reaches the CLI, so there is nothing there to fall back from.
 | `strictMcpConfig` | boolean | `false` | Pass `--strict-mcp-config` so Claude loads **only** the configured servers and ignores `~/.claude/settings.json`. |
 | `hotReloadMcp` | boolean | `true` | With MCP bridging on, compare the merged MCP config and runtime status at the start of each turn and respawn the `claude` process when they drifted, so a server you just enabled or disabled becomes visible without restarting opencode or opening a new chat. Eviction waits for pending proxy calls, never happening mid tool-call, and the session id is preserved for `--resume`. Set `false` to keep a cached subprocess until the chat is reset. It does not reload other provider options and does not watch the contents of files named in `mcpConfig`. |
 | `proxyOpencodeMcpTools` | boolean | `false` | Route opencode's MCP-backed tools through the in-process `opencode_proxy` server instead of bridging them straight into Claude's `--mcp-config`, so each call executes once, inside opencode, with its permission prompt and its tool row. **The default changed from `true` to `false` in this release, and no behaviour changed with it:** at `true` it used to route nothing at all, because discovery read opencode's tool registry, which contains built-ins and plugin-declared tools and has never contained an MCP tool. Discovery now reads the model tool set opencode passes the provider, which is where MCP tools actually are, so the option works, and turning it on is the operator's decision rather than a silent migration of traffic that the direct bridge is handling today. Two caveats before enabling it: pair it with `strictMcpConfig: true`, because a server also registered in Claude Code's own config is reached directly and bypasses the proxy entirely; and a routed call runs in opencode with the calling agent's permissions, the same trade [`proxyOpencodeTools`](#options-reference) makes. Servers whose tools are not found stay on the direct bridge, and a warning says so, so do not treat this as an exactly-once guarantee for write-capable tools. |
-| `proxyOpencodeTools` | string[] | `[]` | Forward named opencode tools through the proxy by their registry id, for tools another opencode plugin declares directly and that therefore belong to no MCP server (opencode-dcp's `compress`). Explicit allowlist; a forwarded tool runs inside opencode with the calling agent's permissions. A name already held by a proxy def is dropped with a warning rather than taking it over. See [Forwarding opencode's own tools](#forwarding-opencode-s-own-tools). |
+| `proxyOpencodeTools` | string[] | `[]` | Forward explicitly named opencode tools through the proxy (for example, a plugin's `compress` or V2 Code Mode `execute`). V1 uses registry ids; V2 uses the current model tool snapshot, including its real JSON Schema and agent visibility, not the registry's empty schemas. A forwarded tool runs inside opencode with the calling agent's permissions. A name already held by a proxy def is dropped with a warning. The read-only preset refuses `execute`. See [Forwarding opencode's own tools](#forwarding-opencode-s-own-tools) and [V2 Code Mode](#v2-code-mode). |
 | `stripContextReminders` | boolean | `false` | Remove opencode-dcp's `<dcp-system-reminder>` blocks from message text when no `compress` tool is proxied, so an order the model cannot follow stops being re-sent with every message that carries it. Inert as soon as `compress` is reachable. See [Trimming unsatisfiable context reminders](#trimming-unsatisfiable-context-reminders). |
 | `webSearch` | `"claude"` \| `"disabled"` \| `<tool>` | `"claude"` | Routing for Claude's built-in `WebSearch`. See [WebSearch routing](#websearch-routing). |
 | `multiStepContinuation` | boolean | `true` | Append a system-prompt hint nudging Claude to chain tool calls within one turn instead of pausing between subtasks. Each opencode turn boundary requires the user to manually press "continue", so for multi-step tasks this reduces friction. Set `false` to disable. |
@@ -1063,16 +1063,39 @@ Claude Code ships a built-in `WebSearch` tool. The `webSearch` option controls w
 
 ## MCP bridge
 
-If `bridgeOpencodeMcp` is true (the default), the plugin reads your opencode config's `mcp` block, translates it into Claude's MCP schema, writes it to a temp file, and passes that to `claude --mcp-config`. So whatever MCP servers you've already configured in opencode become available to Claude with no extra setup.
+If `bridgeOpencodeMcp` is true (the default), the plugin reads your opencode config's MCP servers, translates them into Claude's MCP schema, writes a private temp file, and passes it to `claude --mcp-config`. It accepts V1 `mcp.<server>` and V2 `mcp.servers.<server>`; V2's `servers` container and timeout defaults are not servers. `disabled: true` is supported alongside legacy `enabled: false`. Live runtime status takes precedence when available.
 
-### Discovery order (highest to lowest priority)
+### Discovery and precedence
 
-1. `OPENCODE_CONFIG` env var (file path)
-2. `OPENCODE_CONFIG_DIR` env var
-3. Walk up from the current `cwd` looking for `opencode.jsonc`, `opencode.json`, `config.json`, or a `.opencode/` directory
-4. Global `$XDG_CONFIG_HOME/opencode` or `~/.config/opencode`
+The disk bridge reads global config, then `OPENCODE_CONFIG`, then project direct files and `.opencode` files. V1 keeps its existing repo-boundary discovery, `.opencode` ordering and per-server deep merges.
 
-Later sources override earlier ones **by server name**, so a project-level MCP server replaces a global one with the same id.
+On V2, project discovery walks to the filesystem root (including ancestors above the repo). Direct files are applied parent-first, then `.opencode` files parent-first: the closest file wins within each group, and all `.opencode` files override direct files. Each higher-precedence server entry **replaces the entire server object**, so repeat its type, URL/command and other required fields in an override. Both `.json` and `.jsonc` are read, with `.jsonc` winning within a directory. Runtime toggles continue to participate in the hot-reload hash.
+
+### V2 Code Mode
+
+V2 normally exposes MCP tools through Code Mode's `execute` and its catalog, rather than as individual server-prefixed model tools. `proxyOpencodeMcpTools` matches individual tools only; on a Code Mode-only snapshot it warns and falls back to the direct Claude MCP bridge. This fallback does **not** execute tools under opencode's permission policy.
+
+To explicitly opt into Code Mode through opencode instead, use these provider settings (headless transport):
+
+```json
+{
+  "providers": {
+    "claude-code": {
+      "settings": {
+        "proxyOpencodeTools": ["execute"],
+        "bridgeOpencodeMcp": false,
+        "strictMcpConfig": true
+      }
+    }
+  }
+}
+```
+
+Preserve other entries in `proxyOpencodeTools`. `execute` is a code runner that can call **all tools in the session's Code Mode catalog**, not just MCP; opting in must be deliberate. It runs in opencode with the calling agent's permissions, and the plugin refuses it under `permissionPreset: "read-only"`. The plugin preserves the model-visible schema and tells Claude to call `mcp__opencode_proxy__execute` (discoverable via `ToolSearch`), using the original `search(...)` and `tools[...]` catalog signatures inside its code argument.
+
+`bridgeOpencodeMcp: false` prevents a second direct MCP connection, while `strictMcpConfig: true` excludes Claude's own MCP sources. Do not add the same servers through explicit `mcpConfig` if you want Code Mode-only routing. OpenCode still owns the MCP connections; disabling the disk bridge does not disable its catalog.
+
+For individual MCP proxies instead, set `codemode: false` on the relevant V2 MCP servers, then use `proxyOpencodeMcpTools: true` with `strictMcpConfig: true`. Neither approach guarantees exactly-once side effects across retries. Fully restart all opencode server/GUI processes after changing provider settings or plugin code; a new chat alone is insufficient. Real Claude smoke tests consume usage and run configured hooks, so request approval first.
 
 ### Translation
 

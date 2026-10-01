@@ -90,7 +90,7 @@ export function effectiveMcpConfig(
   let bridgedHash: string | null = null
   let allEnabledServerNames: string[] = []
   if (config.bridgeOpencodeMcp !== false) {
-    const bridged = bridgeOpencodeMcp(cwd, runtimeStatus, excludeServers)
+    const bridged = bridgeOpencodeMcp(cwd, runtimeStatus, excludeServers, config.hostApi)
     if (bridged) {
       if (bridged.path) paths.push(bridged.path)
       bridgedHash = bridged.hash
@@ -193,7 +193,11 @@ export function resolvedProxyMcpTools(
     // going direct, and so still are not permission-prompted by opencode.
     log.warn(
       "proxyOpencodeMcpTools is on but no MCP tool was found in opencode's" +
-        " tool set; those servers stay on the direct bridge this spawn",
+        " tool set; those servers stay on the direct bridge this spawn" +
+        (config.hostApi === "v2" && modelTools?.some((tool) => tool.name === "execute")
+          ? ". For V2 Code Mode, explicitly allowlist execute in proxyOpencodeTools" +
+            " and use bridgeOpencodeMcp: false with strictMcpConfig: true"
+          : ""),
       { servers: allEnabledServerNames, modelTools: modelTools?.length ?? 0 },
     )
     return null

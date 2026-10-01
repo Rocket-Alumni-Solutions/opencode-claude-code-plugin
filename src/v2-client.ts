@@ -186,7 +186,8 @@ export function createV1ClientShim(ctx: V2ClientContext): Record<string, unknown
     client.tool = {
       // V1: `{ data: [{ id, description, parameters }] }`. V2 returns the tools
       // themselves, with an Effect schema for input rather than JSON Schema, so
-      // `parameters` is empty; only `proxyOpencodeTools` reads it.
+      // `parameters` is empty. V2 proxyOpencodeTools uses the per-turn model
+      // snapshot instead, which also includes synthesized Code Mode execute.
       list: async () => {
         const tools = await toolList.call(ctx.tool)
         const data = (tools ?? []).flatMap((tool) => {

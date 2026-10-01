@@ -109,6 +109,16 @@ Structured questions in this environment go through exactly one tool: \`mcp__ope
 - Do NOT call bare \`question\` — that is not a tool. Always use the full \`mcp__opencode_proxy__question\` name when invoking it.
 - Claude Code's built-in \`AskUserQuestion\` is disabled in this environment; the proxy is the only way to ask structured questions.`
 
+export function codeModeProxyHint(active: boolean): string {
+  return active
+    ? `## opencode Code Mode
+
+Instructions referring to the execute tool mean \`mcp__opencode_proxy__execute\` in this Claude Code session. Use its full name; if deferred, load it with ToolSearch (\`select:mcp__opencode_proxy__execute\`). Pass the code argument unchanged, using the provided catalog's exact \`search(...)\` and \`tools[...]\` signatures inside that code. The catalog tools are not separate Claude tools. Calls execute in opencode under this session's permissions.`
+    : `## opencode Code Mode unavailable
+
+The forwarded opencode catalog may mention execute, but this session does not expose an execute proxy. Do not invent an execute tool or claim a catalog call ran. For MCP servers available directly in Claude Code, discover their actual MCP tools with ToolSearch instead. If no matching tool exists, report that limitation; a shell/CLI call is not a test of MCP.`
+}
+
 /**
  * Prepended to every appended system prompt so Claude knows which
  * context-management tools exist in the Claude CLI runtime versus a

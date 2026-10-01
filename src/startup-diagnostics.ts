@@ -184,7 +184,9 @@ export function collectStartupDiagnostics(
     // Disk-only view: opencode's runtime MCP status isn't settled at plugin
     // init (servers are still connecting), so the per-turn overlay is not
     // applied here. This is what the bridge would ship on a cold start.
-    mcpServers = mergeOpencodeMcp(cwd.resolved).enabledServerNames
+    const hostApi = firstOption(providers, "hostApi") === "v2" ||
+      opencodeVersion?.replace(/^v/, "").startsWith("2.") ? "v2" : "v1"
+    mcpServers = mergeOpencodeMcp(cwd.resolved, undefined, hostApi).enabledServerNames
   } catch (err) {
     log.debug("startup diagnostics could not read MCP config", {
       error: err instanceof Error ? err.message : String(err),

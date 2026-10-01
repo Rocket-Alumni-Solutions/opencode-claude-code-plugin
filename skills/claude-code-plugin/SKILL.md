@@ -129,7 +129,7 @@ Defaults below describe normal headless opencode use when the key is absent.
 | `strictMcpConfig` | boolean | `false` | Headless `--strict-mcp-config`: use only explicitly supplied MCP configs, ignoring other MCP sources, not all settings/credentials/hooks. The interactive wrapper adds it whenever it passes MCP paths, independently of this option. |
 | `hotReloadMcp` | boolean | `true` | With bridging on, compare merged MCP config/status at turn start and respawn on drift after pending proxy calls resolve. Keeps the session via headless `--resume`. Does not reload arbitrary provider options or watch explicit `mcpConfig` contents. |
 | `proxyOpencodeMcpTools` | boolean | `false` | Route opencode's MCP-backed tools through opencode's executor instead of Claude's own `--mcp-config` child, so each call is permission-prompted and rendered as an opencode tool row. Default changed `true` to `false` here, with no behaviour change: at `true` it routed nothing, because discovery read opencode's tool registry, which never contains MCP tools. Discovery now reads the model tool set opencode passes the provider, verified live on opencode 1.18.31 / Claude Code 2.1.263. **Tell the user to set `strictMcpConfig: true` alongside it**: a server also present in Claude Code's own config is reached directly and the proxy is bypassed, which looks exactly like the option doing nothing. A routed call runs with the calling agent's permissions. Servers whose tools are not found stay on the direct bridge and log a warning. Do not promise exactly-once side effects across failures, retries or opencode versions; verify routing before using write-capable tools. |
-| `proxyOpencodeTools` | string[] | `[]` | Forward named opencode tools through the proxy by registry id (`client.tool.list()`, matched case-insensitively). Covers tools another opencode plugin declares directly, which belong to no MCP server and so are never matched by `proxyOpencodeMcpTools`: opencode-dcp's `compress` is the motivating case. Same broker as every other proxy tool, so the same events release the call. Unknown name is skipped with a warning; a name a proxy def already holds is dropped with a warning and the existing tool keeps it. Explicit allowlist only, because a forwarded tool runs in opencode with the calling agent's permissions. |
+| `proxyOpencodeTools` | string[] | `[]` | Forward explicitly named opencode tools (case-insensitive): V1 resolves registry ids; V2 resolves the current model tool snapshot and its actual JSON Schema, including synthesized Code Mode `execute`, without re-exposing tools absent from that snapshot. Covers plugin-declared tools such as DCP's `compress` and V2 Code Mode. Same broker as other proxies; collisions and unknown names warn. Explicit allowlist only, because calls run in opencode with the agent's permissions. `execute` grants access to the session's whole Code Mode catalog, not just MCP, and is refused by the read-only preset. |
 | `stripContextReminders` | boolean | `false` | Strip opencode-dcp `<dcp-system-reminder>` blocks from user/assistant message text, including the fresh-session rebuild. Only when no `compress` is proxied via `proxyTools` or `proxyOpencodeTools`; reachable compress makes it inert. Resolved from config, so a configured-but-unregistered name still counts as reachable. Leaves opencode's own `<system-reminder>` blocks alone. |
 | `multiStepContinuation` | boolean | `true` | Append a system-prompt hint to chain tool calls in one turn instead of stopping between subtasks. |
 | `autoContinueIncompleteTurns` | boolean or `"smart"` | `"smart"` | `true`/`"smart"` continue a turn truncated at `max_tokens`, bounded by 8 attempts and 10 minutes, and otherwise run the keyword heuristic only when stop reason is missing. Every other stop reason, plus error, abort or latched question, stops it. Current measured CLIs always report a reason, so truncation is the only case that resumes in practice. Also gates the `▌ **no reply:**` note written when a turn finishes cleanly with no text and no tool call; `false` turns off the note as well as the continuation. |
@@ -222,6 +222,35 @@ Same package, same config. 2.x's native key is `plugins` (plural), but it still 
 - `provider.claude-code.options` still works on 2.x; `provider.claude-code.settings` is the native spelling and wins where both are set. `accounts` may also sit in the plugin entry's own `options`.
 - A local checkout is loaded by pointing `plugins` at its **`dist`** directory, never the repository root.
 - Known 2.x differences: `/btw` is answered after the running turn rather than inside it, and there is no todo panel (2.x has no `todowrite` tool). Do not set `hostApi`; the 2.x entrypoint sets it, and forcing it on 1.x breaks every proxied tool call.
+
+#### V2 MCP and Code Mode
+
+V2 MCP config is `mcp.servers.<name>`, with `disabled` rather than `enabled`.
+The disk bridge accepts both shapes. V2 discovery includes ancestors above the
+repo, and nearest `.opencode` config wins after all direct configs. Higher
+precedence server entries replace the entire spec; repeat required fields.
+Doctor must report actual names, never the container name `servers`.
+
+V2 defaults to Code Mode, where MCP functions are behind `execute` rather than
+individual tools. `proxyOpencodeMcpTools` cannot prefix-match that tool and
+warns before leaving servers on the direct bridge. Two deliberate choices:
+
+- Individual proxies: set `codemode: false` on selected MCP servers and pair
+  `proxyOpencodeMcpTools: true` with `strictMcpConfig: true`.
+- Preserve Code Mode: after explaining that `execute` can invoke **all tools
+  in the session catalog**, add it to `proxyOpencodeTools`, set
+  `bridgeOpencodeMcp: false` and `strictMcpConfig: true`. In native V2 config
+  these belong under `providers.claude-code.settings`; preserve other
+  allowlisted entries. Do not also pass those servers through `mcpConfig`.
+
+The headless proxy exposes `mcp__opencode_proxy__execute` using the actual
+per-turn schema and catalog. Claude uses ToolSearch to discover that full name,
+then the original `search(...)` and `tools[...]` signatures inside its code.
+No execute proxy is automatic; the read-only preset refuses this code runner.
+With the bridge off, OpenCode still owns MCP connections and catalog updates,
+but the plugin's disk-MCP hot-reload mechanism does not apply. This path is
+verified offline with a fake CLI, not a paid live Claude probe. Fully restart
+all opencode processes after provider/plugin changes; ask before live probes.
 
 ### Two accounts
 

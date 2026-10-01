@@ -11,7 +11,11 @@ import { log } from "./logger.js"
 import { pluginTmpDir } from "./tmp.js"
 
 /**
- * Bridge opencode's `mcp` config block into a Claude CLI `--mcp-config` file.
+ * Bridge opencode's MCP config into a Claude CLI `--mcp-config` file.
+ * V2 uses `mcp.servers` and `disabled`, replaces whole server specs at each
+ * layer, and discovers ancestors through filesystem root (direct configs
+ * first, then .opencode configs, parent first in each group). The host is
+ * passed per call; the V1 behavior described below remains the default.
  *
  * Opencode core schema (packages/opencode/src/config/mcp.ts):
  *   {
@@ -68,6 +72,8 @@ import { pluginTmpDir } from "./tmp.js"
 
 const FILE_NAMES = ["opencode.jsonc", "opencode.json", "config.json"] as const
 const PROJECT_FILE_NAMES = ["opencode.json", "opencode.jsonc"] as const
+
+export type McpHostApi = "v1" | "v2"
 
 function fileExists(p: string): boolean {
   try {
@@ -193,7 +199,7 @@ function globalConfigDir(): string {
  * opencode core's `loadGlobal`: deep-merges config.json → opencode.json
  * → opencode.jsonc in that order (jsonc wins).
  */
-function loadGlobalConfig(): Record<string, unknown> {
+function loadGlobalConfig(hostApi: McpHostApi = "v1"): Record<string, unknown> {
   const dir = globalConfigDir()
   let merged: Record<string, unknown> = {}
   for (const name of FILE_NAMES.slice().reverse()) {
@@ -201,19 +207,19 @@ function loadGlobalConfig(): Record<string, unknown> {
     const file = path.join(dir, name)
     if (!fileExists(file)) continue
     const parsed = readAndParse(file)
-    if (parsed) merged = deepMerge(merged, parsed)
+    if (parsed) merged = mergeConfigLayer(merged, parsed, hostApi)
   }
   return merged
 }
 
 /** Load both `opencode.json` and `opencode.jsonc` in `dir`, deep-merged. */
-function loadProjectFilesInDir(dir: string): Record<string, unknown> {
+function loadProjectFilesInDir(dir: string, hostApi: McpHostApi = "v1"): Record<string, unknown> {
   let merged: Record<string, unknown> = {}
   for (const name of PROJECT_FILE_NAMES) {
     const file = path.join(dir, name)
     if (!fileExists(file)) continue
     const parsed = readAndParse(file)
-    if (parsed) merged = deepMerge(merged, parsed)
+    if (parsed) merged = mergeConfigLayer(merged, parsed, hostApi)
   }
   return merged
 }
@@ -260,6 +266,7 @@ interface OpencodeLocalServer {
   command?: string[]
   environment?: Record<string, string>
   enabled?: boolean
+  disabled?: boolean
 }
 
 interface OpencodeRemoteServer {
@@ -267,9 +274,10 @@ interface OpencodeRemoteServer {
   url?: string
   headers?: Record<string, string>
   enabled?: boolean
+  disabled?: boolean
 }
 
-type OpencodeServer = OpencodeLocalServer | OpencodeRemoteServer | { enabled?: boolean }
+type OpencodeServer = OpencodeLocalServer | OpencodeRemoteServer | { enabled?: boolean; disabled?: boolean }
 
 /**
  * Substitute opencode's `{env:VAR}` interpolation in a string-keyed record
@@ -353,8 +361,43 @@ function extractMcpBlock(
   config: Record<string, unknown>,
 ): Record<string, OpencodeServer> {
   const mcp = config.mcp
-  if (!mcp || typeof mcp !== "object" || Array.isArray(mcp)) return {}
-  return mcp as Record<string, OpencodeServer>
+  if (!isPlainObject(mcp)) return {}
+  // A V1 server may itself be named `servers`; its type distinguishes it
+  // from V2's container. Do not interpret V2's timeout defaults as a server.
+  if ("servers" in mcp && !isPlainObject(mcp.servers)) return {}
+  const native = isPlainObject(mcp.servers) &&
+    typeof mcp.servers.type !== "string" &&
+    typeof mcp.servers.enabled !== "boolean" &&
+    typeof mcp.servers.disabled !== "boolean"
+  const block = native ? mcp.servers as Record<string, unknown> : mcp
+  return Object.fromEntries(
+    Object.entries(block)
+      .filter(([name, spec]) => isPlainObject(spec) &&
+        (native || name !== "timeout" || typeof spec.type === "string"))
+      .map(([name, spec]) => {
+        const server = spec as Record<string, unknown>
+        return [name, {
+          ...server,
+          ...(typeof server.disabled === "boolean" ? { enabled: !server.disabled } : {}),
+        }]
+      }),
+  ) as Record<string, OpencodeServer>
+}
+
+/** V2 replaces a server at each layer; V1 keeps its historical deep merge. */
+function mergeConfigLayer(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+  hostApi: McpHostApi,
+): Record<string, unknown> {
+  const merged = deepMerge(target, source)
+  if (hostApi === "v2" && isPlainObject(source.mcp)) {
+    merged.mcp = {
+      ...(isPlainObject(merged.mcp) ? merged.mcp : {}),
+      servers: { ...extractMcpBlock(target), ...extractMcpBlock(source) },
+    }
+  }
+  return merged
 }
 
 /**
@@ -439,12 +482,13 @@ export function bridgeOpencodeMcp(
   cwd: string,
   runtimeStatus?: RuntimeMcpStatus,
   excludeServers?: ReadonlySet<string>,
+  hostApi: McpHostApi = "v1",
 ): BridgedMcp | null {
   const {
     servers: merged,
     enabledServerNames: allEnabledServerNames,
     hash,
-  } = mergeOpencodeMcp(cwd, runtimeStatus)
+  } = mergeOpencodeMcp(cwd, runtimeStatus, hostApi)
 
   // Translate every still-enabled server, skipping any caller has asked us
   // to exclude (because they're being routed through the proxy instead).
@@ -475,12 +519,12 @@ export function bridgeOpencodeMcp(
  * opencode's config (the V2 entrypoint's `accounts` lookup) share it rather
  * than each walking the layers themselves.
  */
-export function opencodeConfigLayers(cwd: string): Record<string, unknown>[] {
-  const worktree = detectWorktree(cwd)
+export function opencodeConfigLayers(cwd: string, hostApi: McpHostApi = "v1"): Record<string, unknown>[] {
+  const worktree = hostApi === "v2" ? undefined : detectWorktree(cwd)
   const layers: Record<string, unknown>[] = []
 
   // Layer 1: global merged
-  layers.push(loadGlobalConfig())
+  layers.push(loadGlobalConfig(hostApi))
 
   // Layer 2: OPENCODE_CONFIG (single file, applied before project walk-up)
   const explicitConfig = process.env.OPENCODE_CONFIG
@@ -509,25 +553,31 @@ export function opencodeConfigLayers(cwd: string): Record<string, unknown>[] {
     }
   }
   for (const dir of projectDirs.slice().reverse()) {
-    layers.push(loadProjectFilesInDir(dir))
+    layers.push(loadProjectFilesInDir(dir, hostApi))
   }
 
-  // Layer 4: `.opencode/` siblings — project walk-up then home-dir then
-  // OPENCODE_CONFIG_DIR, in that order. Iteration order matches opencode's
-  // (cwd-most first within walk-up), so under deep-merge "later wins"
-  // parent-most `.opencode/` overrides cwd-most. This is upstream's
-  // behavior, surprising though it is.
-  for (const dir of dotOpencodeDirs(cwd, worktree)) {
-    layers.push(loadProjectFilesInDir(dir))
+  // Layer 4: .opencode configs. V1 retains its historical cwd-first walk,
+  // home-dir and OPENCODE_CONFIG_DIR order; V2 applies parent-first layers.
+  if (hostApi === "v2") {
+    // V2 discovers ancestors through filesystem root, and all .opencode
+    // layers come after direct configs, parent first / nearest last.
+    const dirs = walkUp({ start: cwd, targets: [".opencode"], predicate: dirExists }).reverse()
+    const extra = process.env.OPENCODE_CONFIG_DIR
+    if (extra && dirExists(extra)) layers.push(loadProjectFilesInDir(extra, hostApi))
+    for (const dir of dirs) layers.push(loadProjectFilesInDir(dir, hostApi))
+  } else {
+    for (const dir of dotOpencodeDirs(cwd, worktree)) {
+      layers.push(loadProjectFilesInDir(dir))
+    }
   }
 
   return layers
 }
 
-/** The on-disk opencode config, every layer deep-merged in precedence order. */
-export function loadMergedOpencodeConfig(cwd: string): Record<string, unknown> {
+/** The on-disk config, with host-specific MCP merging in precedence order. */
+export function loadMergedOpencodeConfig(cwd: string, hostApi: McpHostApi = "v1"): Record<string, unknown> {
   let merged: Record<string, unknown> = {}
-  for (const layer of opencodeConfigLayers(cwd)) merged = deepMerge(merged, layer)
+  for (const layer of opencodeConfigLayers(cwd, hostApi)) merged = mergeConfigLayer(merged, layer, hostApi)
   return merged
 }
 
@@ -541,10 +591,12 @@ export function loadMergedOpencodeConfig(cwd: string): Record<string, unknown> {
 export function mergeOpencodeMcp(
   cwd: string,
   runtimeStatus?: RuntimeMcpStatus,
+  hostApi: McpHostApi = "v1",
 ): MergedMcp {
   let merged: Record<string, OpencodeServer> = {}
-  for (const layer of opencodeConfigLayers(cwd)) {
-    merged = mergeMcp(merged, extractMcpBlock(layer))
+  for (const layer of opencodeConfigLayers(cwd, hostApi)) {
+    const servers = extractMcpBlock(layer)
+    merged = hostApi === "v2" ? { ...merged, ...servers } : mergeMcp(merged, servers)
   }
 
   // Layer 5: opencode runtime overlay. opencode's `/mcps` UI toggle calls
@@ -668,4 +720,5 @@ export const __test = {
   loadGlobalConfig,
   loadProjectFilesInDir,
   dotOpencodeDirs,
+  extractMcpBlock,
 }

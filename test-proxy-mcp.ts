@@ -1347,6 +1347,14 @@ test("non-function and unnamed entries are skipped", () => {
   assert.deepEqual(defs.map((def) => def.name), ["figma_ok"])
 })
 
+test("Code Mode execute is never automatically proxied by a server-name collision", () => {
+  const resolution = resolveMcpProxyToolDefs({
+    serverNames: ["execute"],
+    tools: [modelTool("execute"), modelTool("execute_lookup")],
+  })
+  assert.deepEqual(resolution.defs.map(t => t.name), ["execute_lookup"])
+})
+
 // --- the wiring: what actually reaches the spawned `claude` ----------------
 //
 // The tests above pin `resolveMcpProxyToolDefs` as a function. These pin the
@@ -1387,7 +1395,7 @@ readline.createInterface({ input: process.stdin }).on("line", () => {
  * `--mcp-config` payload the CLI was actually given, split into the proxy's
  * own config and the bridged one.
  */
-async function mcpConfigsForSpawn(servers: string[], modelToolNames: string[]) {
+async function mcpConfigsForSpawn(servers: string[], modelToolNames: string[], hostApi: "v1" | "v2" = "v1") {
   const fsMod = await import("node:fs")
   const pathMod = await import("node:path")
   const osMod = await import("node:os")
@@ -1409,7 +1417,9 @@ async function mcpConfigsForSpawn(servers: string[], modelToolNames: string[]) {
   fsMod.writeFileSync(
     pathMod.join(root, "opencode", "opencode.json"),
     JSON.stringify({
-      mcp: Object.fromEntries(
+      mcp: hostApi === "v2" ? { servers: Object.fromEntries(
+        servers.map((name) => [name, { type: "remote", url: `https://${name}.invalid/mcp` }]),
+      ) } : Object.fromEntries(
         servers.map((name) => [
           name,
           { type: "remote", url: `https://${name}.invalid/mcp`, enabled: true },
@@ -1438,6 +1448,7 @@ async function mcpConfigsForSpawn(servers: string[], modelToolNames: string[]) {
     const model = createClaudeCode({
       cliPath: cli.cliPath,
       cwd,
+      hostApi,
       proxyOpencodeMcpTools: true,
       proxyTools: [],
       bridgeOpencodeSkills: false,
@@ -1501,4 +1512,90 @@ test("a server contributing no tools is still bridged, and a fully covered set n
   // bridge returns no path, and the CLI gets a single --mcp-config.
   const full = await mcpConfigsForSpawn(["gamma", "delta"], ["gamma_thing", "delta_thing"])
   assert.deepEqual(full, { count: 1, proxyConfigs: 1, bridged: [] })
+
+  const v2 = await mcpConfigsForSpawn(["native-alpha", "native-beta"], ["native-alpha_thing"], "v2")
+  assert.deepEqual(v2, { count: 2, proxyConfigs: 1, bridged: [["native-beta"]] })
+})
+
+test("V2 Code Mode execute round-trips through the provider and broker with its real schema", { timeout: 15000 }, async () => {
+  const fsMod = await import("node:fs")
+  const pathMod = await import("node:path")
+  const osMod = await import("node:os")
+  const { createClaudeCode } = await import("./src/index.js")
+  const { sessionKey, deleteActiveProcessAndWait, deleteClaudeSessionId } = await import("./src/session-manager.js")
+  const { getPendingProxyCalls } = await import("./src/proxy-broker.js")
+  const root = fsMod.mkdtempSync(pathMod.join(osMod.tmpdir(), "oc-code-mode-"))
+  const cliPath = pathMod.join(root, "fake-claude.cjs")
+  const code = 'return await tools.github.get_me();'
+  const schema = { type: "object", properties: { code: { type: "string" } }, required: ["code"], additionalProperties: false }
+  fsMod.writeFileSync(cliPath, `#!/usr/bin/env node
+const fs = require("node:fs")
+const readline = require("node:readline")
+if (process.argv.includes("--version")) { console.log("2.1.258"); process.exit(0) }
+if (process.argv.includes("--help")) { console.log("Usage: claude"); process.exit(0) }
+const args = process.argv.slice(2)
+const idx = args.indexOf("--mcp-config")
+const config = JSON.parse(fs.readFileSync(args[idx + 1], "utf8"))
+const proxy = config.mcpServers.opencode_proxy
+if (!args.includes("--strict-mcp-config") || Object.keys(config.mcpServers).length !== 1) process.exit(3)
+const prompt = fs.readFileSync(args[args.indexOf("--append-system-prompt-file") + 1], "utf8")
+if (!prompt.includes("select:mcp__opencode_proxy__execute")) process.exit(4)
+const emit = x => console.log(JSON.stringify(x))
+const session_id = "fixture-code-mode"
+async function rpc(method, params) {
+  const r = await fetch(proxy.url, { method: "POST", headers: { ...proxy.headers, "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: method, method, params }) })
+  return r.json()
+}
+let started = false
+readline.createInterface({ input: process.stdin }).on("line", async line => {
+  if (JSON.parse(line).type !== "user" || started) return
+  started = true
+  try {
+    const list = await rpc("tools/list", {})
+    const def = list.result.tools.find(t => t.name === "execute")
+    if (!def || JSON.stringify(def.inputSchema) !== JSON.stringify(${JSON.stringify(schema)})) throw Error("wrong execute schema")
+    emit({ type: "system", subtype: "init", session_id })
+    emit({ type: "assistant", session_id, message: { role: "assistant", content: [{ type: "tool_use", id: "fixture-execute-call", name: "mcp__opencode_proxy__execute", input: { code: ${JSON.stringify(code)} } }] } })
+    const result = await rpc("tools/call", { name: "execute", arguments: { code: ${JSON.stringify(code)} } })
+    emit({ type: "assistant", session_id, message: { role: "assistant", stop_reason: "end_turn", content: [{ type: "text", text: result.result.content[0].text }] } })
+    emit({ type: "result", subtype: "success", session_id, is_error: false, usage: { input_tokens: 1, output_tokens: 1 }, duration_ms: 1, num_turns: 1 })
+  } catch (e) { console.error(e.message); process.exit(5) }
+})
+`)
+  fsMod.chmodSync(cliPath, 0o755)
+  const modelId = "claude-test-code-mode"
+  const sk = sessionKey(root, `${modelId}::tools::default::context=["claude-code",null]`)
+  try {
+    const model = createClaudeCode({
+      cliPath, cwd: root, hostApi: "v2", proxyTools: [],
+      proxyOpencodeTools: ["execute"], bridgeOpencodeMcp: false,
+      strictMcpConfig: true, autoContinueIncompleteTurns: false,
+    }).languageModel(modelId)
+    const options: any = {
+      prompt: [{ role: "system", content: "Use execute with the supplied catalog." }, { role: "user", content: [{ type: "text", text: "Check fixture GitHub MCP." }] }],
+      tools: [{ type: "function", name: "execute", description: "Run catalog code", inputSchema: schema }],
+    }
+    const first = await model.doStream(options)
+    const parts: any[] = []
+    for await (const part of first.stream) parts.push(part)
+    const call = parts.find(p => p.type === "tool-call")
+    assert.ok(call)
+    assert.equal(call.toolName, "execute")
+    assert.deepEqual(JSON.parse(call.input), { code })
+    assert.equal(getPendingProxyCalls(sk).length, 1)
+    options.prompt.push(
+      { role: "assistant", content: [{ type: "tool-call", toolCallId: call.toolCallId, toolName: "execute", input: { code } }] },
+      { role: "tool", content: [{ type: "tool-result", toolCallId: call.toolCallId, toolName: "execute", output: { type: "text", value: "fixture-user" } }] },
+    )
+    const second = await model.doStream(options)
+    const final: any[] = []
+    for await (const part of second.stream) final.push(part)
+    assert.ok(final.some(p => p.type === "text-delta" && p.delta.includes("fixture-user")))
+    assert.deepEqual(getPendingProxyCalls(sk), [])
+    assert.ok(final.some(p => p.type === "finish" && p.finishReason.unified === "stop"))
+  } finally {
+    await deleteActiveProcessAndWait(sk)
+    deleteClaudeSessionId(sk)
+    fsMod.rmSync(root, { recursive: true, force: true })
+  }
 })

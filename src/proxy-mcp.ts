@@ -1645,12 +1645,22 @@ export interface OpencodeToolListEntry {
 export function resolveProxyOpencodeToolDefs(options: {
   requested?: readonly string[]
   items?: readonly OpencodeToolListEntry[]
+  /** The current, permission-filtered model snapshot (authoritative on V2). */
+  modelTools?: readonly ModelToolEntry[]
+  /** The read-only preset must not expose a Code Mode code runner. */
+  allowCodeExecution?: boolean
   taken?: ReadonlySet<string>
 }): ProxyToolDef[] {
   const requested = options.requested ?? []
   if (requested.length === 0) return []
 
-  const items = options.items
+  const items = options.modelTools !== undefined
+    ? options.modelTools.flatMap((tool) =>
+        (tool.type === undefined || tool.type === "function") && typeof tool.name === "string"
+          ? [{ id: tool.name, description: tool.description, parameters: tool.inputSchema }]
+          : [],
+      )
+    : options.items
   if (!items) {
     log.warn(
       "proxyOpencodeTools is set but opencode's tool registry did not answer;" +
@@ -1680,12 +1690,25 @@ export function resolveProxyOpencodeToolDefs(options: {
       unknown.push(name)
       continue
     }
+    if (item.id === "execute" && options.allowCodeExecution === false) {
+      log.warn("Code Mode execute not forwarded: read-only permission preset")
+      continue
+    }
     if (taken.has(item.id)) {
       collided.push(item.id)
       continue
     }
     if (seen.has(item.id)) continue
     seen.add(item.id)
+    // `execute` is synthesized after registry enumeration. Never fabricate
+    // its schema from the V2 shim's empty `parameters` object.
+    if (item.id === "execute" &&
+        (!item.parameters || typeof item.parameters !== "object" ||
+          Array.isArray(item.parameters) ||
+          !Object.keys(item.parameters).length)) {
+      log.warn("Code Mode execute not forwarded: no model-visible input schema")
+      continue
+    }
     out.push({
       name: item.id,
       description: typeof item.description === "string" ? item.description : "",
@@ -1776,6 +1799,9 @@ export function resolveMcpProxyToolDefs(options: {
     if (tool?.type !== undefined && tool.type !== "function") continue
     const name = typeof tool?.name === "string" ? tool.name.trim() : ""
     if (!name) continue
+    // Code Mode's aggregate runner is not an individual MCP tool, even if
+    // a server happens to be named execute. It requires the explicit allowlist.
+    if (name === "execute") continue
 
     const matchedServer = serversByLengthDesc.find(
       (server) => name === server || name.startsWith(`${server}_`),

@@ -154,6 +154,13 @@ test("seed settings come from V1 options, then V2 settings, then plugin options"
   })
   assert.equal(configuredSeedSettings(config, { cliPath: "plugin" }).cliPath, "plugin")
   assert.deepEqual(configuredSeedSettings({}, undefined), {})
+  const native = {
+    ...config,
+    providers: { "claude-code": { settings: { cliPath: "native-v2", proxyOpencodeTools: ["execute"] } } },
+  }
+  assert.equal(configuredSeedSettings(native, undefined).cliPath, "native-v2")
+  assert.deepEqual(configuredSeedSettings(native, undefined).proxyOpencodeTools, ["execute"])
+  assert.equal(configuredSeedSettings(native, { cliPath: "plugin" }).cliPath, "plugin")
 })
 
 test("compaction and title requests keep the agent names the model keys on", () => {
