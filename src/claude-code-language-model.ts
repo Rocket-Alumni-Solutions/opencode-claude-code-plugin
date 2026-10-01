@@ -1822,12 +1822,14 @@ export class ClaudeCodeLanguageModel implements LanguageModelV3 {
           // `result` closes us before our own answer arrives. Skipped for
           // pure tool-result turns: there the CLI is deliberately parked inside
           // a proxy MCP call. Mixed user input needs a new, interrupted turn.
+          let steeringInterruptResult: string | undefined
           if (steeringMessage && useInteractive) {
             throw new Error("Live steering during a tool call requires the headless Claude Code transport.")
           }
           if (state.activeProcess && (!hasMatchedPendingResults || steeringMessage) && isTurnInFlight(state.activeProcess)) {
             options.abortSignal?.throwIfAborted()
             log.warn("previous turn still in flight; interrupting it", { sk })
+            const bufferedBeforeInterrupt = new Set(state.activeProcess.unattendedLines)
             const idle = await interruptTurn(state.activeProcess)
             options.abortSignal?.throwIfAborted()
             if (!idle) {
@@ -1835,6 +1837,12 @@ export class ClaudeCodeLanguageModel implements LanguageModelV3 {
                 throw new Error("Claude Code did not acknowledge interruption; steering was not sent to a still-running turn.")
               }
               log.warn("previous turn did not stop in time; this turn may see stale output", { sk })
+            }
+            if (steeringMessage && idle) {
+              steeringInterruptResult = state.activeProcess.unattendedLines?.slice().reverse().find((line) => {
+                if (bufferedBeforeInterrupt.has(line)) return false
+                try { return JSON.parse(line).type === "result" } catch { return false }
+              })
             }
           }
 
@@ -2253,7 +2261,7 @@ export class ClaudeCodeLanguageModel implements LanguageModelV3 {
                       if (isPendingProxyCallChannelClosed(entry.call)) entry.recoveryRequired = true
                     }
                     if (outer.session_id) setClaudeSessionId(sk, outer.session_id)
-                    if (msg.is_error && msg.result) text = msg.result
+                    if (msg.is_error && msg.result && line !== steeringInterruptResult) text = msg.result
                   }
                   if (text) controller.enqueue({ type: "text-delta", id: state.currentTextId ?? state.startTextBlock(), delta: text })
                 } catch { /* Ignore incomplete or malformed buffered lines. */ }
@@ -2430,10 +2438,15 @@ export class ClaudeCodeLanguageModel implements LanguageModelV3 {
 
         if (steeringMessage) {
           for (const { call, result } of previousPendingProxyMatches) {
-            if (!result) continue
-            resolvePendingProxyCallById(call.toolCallId, result)
+            if (result) resolvePendingProxyCallById(call.toolCallId, result)
             state.activeProcess?.pendingProxyCompletions?.delete(call.toolCallId)
           }
+          // The interrupted CLI no longer owns these MCP requests. A sibling's
+          // eventual OpenCode result must arrive as context for a fresh turn.
+          rejectAllPendingProxyCallsForSession(
+            sk,
+            new Error("Proxy continuation was interrupted by user steering"),
+          )
           state.unattendedTurnEnded = false
           state.watchdogMessage = steeringMessage
           if (state.activeProcess) noteTurnStarted(state.activeProcess)

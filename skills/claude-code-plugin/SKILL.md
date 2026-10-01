@@ -24,6 +24,8 @@ and user-input request. Completed results become context text so the interrupted
 tool is not answered twice. An interruption timeout is a delivery error, not success;
 retry the request after resolving the CLI stall. Text and supported images are
 forwarded; the existing image-only attachment restriction still applies.
+The interrupt's terminal error is suppressed from the new reply. Unfinished sibling
+MCP requests are released; later OpenCode results are delivered as fresh context.
 
 Three routes reach Claude from opencode, and they are not interchangeable:
 

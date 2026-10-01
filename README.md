@@ -25,6 +25,10 @@ their order. An interruption timeout surfaces an error and leaves delivery
 available for retry. The experimental interactive transport does not support
 this mixed-result steering path.
 
+The interrupt's terminal error is not shown as the new assistant answer. Pending
+sibling MCP requests are released; their later OpenCode results arrive as context
+on a fresh turn instead of resuming the interrupted CLI tool calls.
+
 Consumers can pin this repository to a full Git commit. The `prepare` script
 builds `dist/` when installed as a Git dependency; build tooling and Git are
 required at installation time. No npm publication is required.
