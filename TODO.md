@@ -79,11 +79,10 @@ them ran in this directory.
   same CLI process" got an empty aside at ~5.7 s. Same class as the `test-proxy-task.ts` timing
   note in AGENTS.md. Not investigated yet.
 
-- 2026-09-30: **new contributor PR #67 (@bangnh1)**, unreviewed: V2 `mcp.servers` config
-  normalisation (2.0.18 reads the container as a server named `servers`) and opt-in Code Mode
-  `execute` proxying. +479/-44 over 17 files; overlaps #69 in `src/v2-client.ts`, so it needs a
-  rebase; targets opencode 2.0.18 while the sandbox is capped at 2.0.16 by Aikido. Review
-  now or later?
+- 2026-10-01: follow-up found while verifying PR #67: on a fresh `opencode run` the first turn can
+  be planned before opencode has connected an MCP server, so the runtime-status overlay drops it,
+  and a reused Claude process never re-bridges once it connects (measured on V2 2.0.16; V1 shares
+  the design; the TUI connects servers before the first prompt). See #g178. Not scheduled.
 
 Questions the maintainer still owes an answer on. Written here the turn they are
 raised, so they survive context compaction; removed when answered, done or dropped.
@@ -108,6 +107,10 @@ Nothing parked.
 
 ## Done
 
+- 2026-10-01: **done** (v0.33.1): contributor PR #67 (@bangnh1) merged with credit after review:
+  opencode 2 MCP configs (`mcp.servers`, `disabled`) are bridged, `providers.claude-code.settings`
+  is read, and Code Mode `execute` can be proxied when allowlisted. Verified against the 2.0.16
+  schema and a real sandbox config (master bridged a server named `servers`; the PR bridges `cbm`).
 - 2026-09-30: **done** (v0.33.0, released 2026-10-01 once signing worked again): two lanes as picked ("opencode 2 status/cancel,
   Interactive bugs"). PR #68: the interactive transport synthesizes a headless-shaped `result`
   (`subtype: "success"`, top-level `stop_reason`), so its turns no longer end as errors and the

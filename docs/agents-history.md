@@ -1111,6 +1111,15 @@ Tests: `test-context-usage.ts`, a fake CLI through a real `doStream` (three call
 - **The ledger rows follow (h #g115): read-only snapshots, nothing secret.** `snapshotBackgroundTasks()` copies the sets and touches no ledger. Cancels get their own map purely so the doctor can show them; neither tool reads it, because a cancelled task is still dropped from `collected` so nothing can later claim it was delivered. The ids printed are opencode session ids, which the model was handed and which the report already prints as session affinities, so nothing new is exposed. A conversation with nothing on it takes no row, and `clearBackgroundTasks` empties both maps, so a deleted opencode session leaves no rows behind.
 - Tests: `test-doctor.ts` (not-read-yet, the 1.x refusal wording, a registry that did not answer, the V2 wording and that the 1.x env-var advice never appears there, the ledger rows, and the secret check with the section populated) and `test-background-subagents.ts` (the recorder returns a copy, and the ledger snapshot through real collects and cancels).
 
+<a id="g178"></a>
+
+#### V2 MCP configs and Code Mode (PR #67, merged 2026-10-01)
+
+- **The bug, read off opencode 2's own schema** (`~/opencode-v2-sandbox/pkg/schema/package/dist/config/mcp.d.ts`, 2.0.16): `mcp: { timeout?: TimeoutConfig, servers?: Record<string, LocalConfig | RemoteConfig> }`, with `disabled` (not `enabled`), `codemode`, `protocol` and `timeout` on a server, and the top-level config has `providers` (each with `settings`), `mcp` and `plugins`. The contributor reported it on 2.0.18; it exists on 2.0.16 too.
+- **Measured at merge**, calling `bridgeOpencodeMcp(cwd, { cbm: "connected" }, undefined, "v2")` on a real sandbox config holding `mcp.servers.cbm = { type: "local", command: [codebase-memory-mcp] }`: master's code reported a server named `servers` as enabled and never bridged `cbm`; the PR's bridged `cbm` with its command. The user's V1-format global servers came through identically on both.
+- **A live V2 turn did NOT bridge `cbm`, and that is not the PR's fault**: the turn was planned at 06:56:02.345, opencode logged `mcp connected server=cbm` at 06:56:02.392, and the runtime-status overlay (`enabled: status === "connected"`) correctly dropped a server that was still connecting. A second probe that ran a proxied `bash` first still showed one spawn and the first MCP config: a reused process does not re-bridge when a server connects later. Both are pre-existing, shared with V1, and mostly an `opencode run` artifact, since the TUI connects servers before the first prompt. Recorded as a follow-up.
+- Gate: 980 of 980 on the merged tree (two earlier runs lost 1 and 3 tests to 5-second timeouts at a load average of 31 to 46; the same files passed 49 of 49 in isolation). The squash merge's tree was checked identical to the gated one.
+
 <a id="g110"></a>
 
 #### The four CLI stream events in src/cli-events.ts
