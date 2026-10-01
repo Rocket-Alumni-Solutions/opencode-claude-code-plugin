@@ -74,6 +74,10 @@ them ran in this directory.
 
 ## Open from you
 
+- 2026-10-01: npm's `next` dist-tag still points at 0.27.0 while `latest` is current, so `@next`
+  installs an old version. Removing or moving it is a registry change that needs npm auth
+  (publishing is OIDC-only from CI). Remove it, or leave it?
+
 - 2026-10-01: flaky test, seen once under full-suite load and not in five isolated runs:
   `test-side-question.ts` "provider /btw uses native control response between normal turns on the
   same CLI process" got an empty aside at ~5.7 s. Same class as the `test-proxy-task.ts` timing
@@ -107,6 +111,12 @@ Nothing parked.
 
 ## Done
 
+- 2026-10-01: **done** (v0.33.2): "look at all of it and fix all of it" for the setup skill. PR #70 audited
+  SKILL.md against the code: two contradictory process caps (the code's is 16; AGENTS.md also said 8,
+  corrected in #g179), a non-existent 30-minute idle default, the opencode 2 settings key
+  (`providers.claude-code.settings`, also wrong in the README), a stale "known-broken" question
+  rule, missing 2.1.258 / 2.1.284 floors, and "this fix" troubleshooting rows. Six drift guards
+  added to `test-configure-skill.ts`. 986 tests.
 - 2026-10-01: **done** (v0.33.1): contributor PR #67 (@bangnh1) merged with credit after review:
   opencode 2 MCP configs (`mcp.servers`, `disabled`) are bridged, `providers.claude-code.settings`
   is read, and Code Mode `execute` can be proxied when allowlisted. Verified against the 2.0.16
