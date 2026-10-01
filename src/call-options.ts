@@ -131,9 +131,11 @@ export function describeAbortReason(reason: unknown): string {
  * time after a turn naturally completed; without short-circuiting we'd
  * spawn Claude CLI on an empty turn and the model would reply with a
  * stub like "Did you mean to send a message?".
+ * Exclude tool results when distinguishing user steering from a continuation.
  */
 export function hasNewUserContent(
   prompt: LanguageModelV3CallOptions["prompt"],
+  includeToolResults = true,
 ): boolean {
   for (let i = prompt.length - 1; i >= 0; i--) {
     const msg = prompt[i]
@@ -147,7 +149,7 @@ export function hasNewUserContent(
       const content: any = msg.content
       if (Array.isArray(content)) {
         for (const part of content as any[]) {
-          if (part?.type === "tool-result") return true
+          if (includeToolResults && part?.type === "tool-result") return true
         }
       }
       continue
@@ -161,7 +163,7 @@ export function hasNewUserContent(
     if (Array.isArray(content)) {
       for (const part of content as any[]) {
         if (part.type === "text" && part.text && part.text.trim()) return true
-        if (part.type === "tool-result") return true
+        if (includeToolResults && part.type === "tool-result") return true
         // Image/file-only user turns count as new input — without this the
         // short-circuit drops them as if the turn were empty.
         if (part.type === "image" || part.type === "file") return true

@@ -52,6 +52,181 @@ import {
   sessionKey,
 } from "./src/session-manager.js"
 
+function createSteeringCli(ignoreInterrupt = false, siblings = false) {
+  const cwd = mkdtempSync(join(tmpdir(), "opencode-proxy-steering-"))
+  const cliPath = join(cwd, "fake-claude.cjs")
+  const eventsPath = join(cwd, "events.jsonl")
+  writeFileSync(cliPath, `#!/usr/bin/env node
+const fs = require("node:fs")
+if (process.argv.includes("--version")) { console.log("2.1.280"); process.exit(0) }
+if (process.argv.includes("--help")) { process.exit(0) }
+const args = process.argv.slice(2)
+let proxy
+for (let i = args.indexOf("--mcp-config") + 1; i > 0 && i < args.length && !args[i].startsWith("--"); i++) {
+  proxy = JSON.parse(fs.readFileSync(args[i], "utf8")).mcpServers?.opencode_proxy ?? proxy
+}
+const record = value => fs.appendFileSync(${JSON.stringify(eventsPath)}, JSON.stringify(value) + "\\n")
+const emit = value => console.log(JSON.stringify(value))
+const result = { type: "result", subtype: "success", session_id: "steering-test", is_error: false }
+function answer(text) {
+  emit({ type: "assistant", session_id: "steering-test", message: { role: "assistant", stop_reason: "end_turn", content: [{ type: "text", text }] } })
+  emit(result)
+}
+let started = false
+let interrupted = false
+const pending = new AbortController()
+require("node:readline").createInterface({ input: process.stdin }).on("line", async line => {
+  const input = JSON.parse(line)
+  record({ type: "input", input })
+  if (input.type === "control_request" && input.request.subtype === "interrupt") {
+    if (${ignoreInterrupt} && !fs.existsSync(${JSON.stringify(join(cwd, "allow-interrupt"))})) return
+    interrupted = true
+    pending.abort()
+    emit({ ...result, is_error: true, result: "Interrupted" })
+    return
+  }
+  if (input.type !== "user") return
+  if (started) {
+    if (!interrupted) { record({ type: "queued-until-original-finishes" }); return }
+    answer("STEERING-APPLIED")
+    return
+  }
+  started = true
+  emit({ type: "system", subtype: "init", session_id: "steering-test" })
+  try {
+    await Promise.all(Array.from({ length: ${siblings ? 2 : 1} }, async (_, index) => {
+    const response = await fetch(proxy.url, {
+      method: "POST", headers: { ...proxy.headers, "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: index + 1, method: "tools/call", params: { name: "task", arguments: { description: "test", prompt: "test", subagent_type: "general" } } }),
+      signal: pending.signal,
+    })
+    const body = await response.json()
+    record({ type: "tool-result", body })
+    }))
+    if (!interrupted) answer("ORIGINAL-FINISHED")
+  } catch (error) { if (!interrupted) record({ type: "error", message: error.message }) }
+})
+`, { mode: 0o755 })
+  return { cwd, cliPath, eventsPath }
+}
+
+for (const [name, steering, siblings] of [
+  ["text", [{ type: "text", text: "CHANGE-PLAN" }], false],
+  ["text and image", [{ type: "text", text: "FIRST-CORRECTION" }, { type: "image", image: new Uint8Array([1, 2, 3]), mediaType: "image/png" }], false],
+  ["text with an unfinished sibling", [{ type: "text", text: "CHANGE-PLAN" }], true],
+] as const) {
+  test(`mixed proxy results and ${name} steering interrupt the old CLI continuation and deliver all new content`, { timeout: 20_000 }, async () => {
+    const fake = createSteeringCli(false, siblings)
+    const modelId = "claude-steering-test"
+    const sk = sessionKey(fake.cwd, `${modelId}::tools::default::context=["claude-code",null]`)
+    try {
+      const model = createClaudeCode({ cliPath: fake.cliPath, cwd: fake.cwd, bridgeOpencodeMcp: false, proxyTools: ["Task"] }).languageModel(modelId)
+      const tools = [{ type: "function", name: "task", inputSchema: { type: "object", properties: {} } }]
+      const initial = { role: "user", content: [{ type: "text", text: "Original work" }] }
+      const first = await model.doStream({ prompt: [initial], tools } as any)
+      const parts: any[] = []
+      for await (const part of first.stream) parts.push(part)
+      const call = parts.find(part => part.type === "tool-call")
+      assert.ok(call)
+      const calls = parts.filter(part => part.type === "tool-call")
+      assert.equal(calls.length, siblings ? 2 : 1)
+      if (name === "text") {
+        bufferUnattendedLine(getActiveProcess(sk)!, JSON.stringify({ type: "result", is_error: true, result: "EARLIER-ERROR" }))
+        bufferUnattendedLine(getActiveProcess(sk)!, JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "PRIOR-NARRATION" }] } }))
+      }
+      const prompt = [
+        initial,
+        { role: "assistant", content: calls.map(call => ({ type: "tool-call", toolCallId: call.toolCallId, toolName: "task", input: call.input })) },
+        { role: "tool", content: [{ type: "tool-result", toolCallId: call.toolCallId, toolName: "task", output: { type: "text", value: "ALREADY-COMPLETED-RESULT" } }] },
+        { role: "user", content: steering },
+        { role: "user", content: [{ type: "text", text: "SECOND-CORRECTION" }] },
+      ]
+      const second = await model.doStream({ tools, prompt } as any)
+      const continuation: any[] = []
+      for await (const part of second.stream) continuation.push(part)
+      const events = readFileSync(fake.eventsPath, "utf8").trim().split("\n").map(line => JSON.parse(line))
+      const inputs = events.filter(event => event.type === "input").map(event => event.input)
+      const users = inputs.filter(input => input.type === "user")
+      assert.equal(users.length, 2, "the CLI must receive the correction, not only its original prompt")
+      assert.equal(inputs[1].request?.subtype, "interrupt", "steering must not queue behind the old CLI turn")
+      const content = users[1].message.content
+      assert.equal(content.some((part: any) => part.type === "tool_result"), false, "an interrupted MCP call must not receive a duplicate protocol tool_result")
+      assert.equal(JSON.stringify(content).split("ALREADY-COMPLETED-RESULT").length - 1, 1)
+      assert.equal(content.filter((part: any) => part.type === "text").at(-1).text, "SECOND-CORRECTION")
+      if (steering.some(part => part.type === "image")) {
+        assert.deepEqual(content.find((part: any) => part.type === "image"), { type: "image", source: { type: "base64", media_type: "image/png", data: "AQID" } })
+      } else assert.equal(content.filter((part: any) => part.type === "text").at(-2).text, "CHANGE-PLAN")
+      assert.equal(continuation.filter(part => part.type === "text-delta").map(part => part.delta).join(""), name === "text" ? "EARLIER-ERRORPRIOR-NARRATIONSTEERING-APPLIED" : "STEERING-APPLIED")
+      assert.equal(continuation.some(part => part.type === "text-delta" && part.delta.includes("ORIGINAL-FINISHED")), false)
+      assert.equal(events.some(event => event.type === "queued-until-original-finishes"), false)
+      assert.equal(getPendingProxyCalls(sk).length, 0)
+      assert.equal(getActiveProcess(sk)?.pendingProxyCompletions?.size ?? 0, 0)
+      if (siblings) {
+        const sibling = calls[1]
+        const late: any[] = []
+        for await (const part of (await model.doStream({ tools, prompt: [
+          ...prompt,
+          { role: "assistant", content: [{ type: "text", text: "STEERING-APPLIED" }] },
+          { role: "tool", content: [{ type: "tool-result", toolCallId: sibling.toolCallId, toolName: "task", output: { type: "text", value: "LATE-SIBLING-RESULT" } }] },
+        ] } as any)).stream) late.push(part)
+        assert.equal(late.filter(part => part.type === "text-delta").map(part => part.delta).join(""), "STEERING-APPLIED")
+        const delivered = readFileSync(fake.eventsPath, "utf8").trim().split("\n").map(line => JSON.parse(line)).filter(event => event.type === "input" && event.input.type === "user")
+        assert.equal(delivered.length, 3)
+        const content = delivered[2].input.message.content
+        assert.equal(content.some((part: any) => part.type === "tool_result"), false)
+        assert.equal(JSON.stringify(content).split("LATE-SIBLING-RESULT").length - 1, 1)
+        assert.equal(getPendingProxyCalls(sk).length, 0)
+        assert.equal(getActiveProcess(sk)?.pendingProxyCompletions?.size ?? 0, 0)
+      }
+    } finally {
+      rejectAllPendingProxyCallsForSession(sk, new Error("test cleanup"))
+      deleteActiveProcess(sk)
+      rmSync(fake.cwd, { recursive: true, force: true })
+    }
+  })
+}
+
+test("a failed steering interruption preserves the result and correction for retry", { timeout: 20_000 }, async () => {
+  const fake = createSteeringCli(true)
+  const modelId = "claude-steering-retry"
+  const sk = sessionKey(fake.cwd, `${modelId}::tools::default::context=["claude-code",null]`)
+  try {
+    const model = createClaudeCode({ cliPath: fake.cliPath, cwd: fake.cwd, bridgeOpencodeMcp: false, proxyTools: ["Task"] }).languageModel(modelId)
+    const tools = [{ type: "function", name: "task", inputSchema: { type: "object", properties: {} } }]
+    const initial = { role: "user", content: [{ type: "text", text: "Original work" }] }
+    const parts: any[] = []
+    for await (const part of (await model.doStream({ prompt: [initial], tools } as any)).stream) parts.push(part)
+    const call = parts.find(part => part.type === "tool-call")
+    assert.ok(call)
+    const options = { tools, prompt: [
+      initial,
+      { role: "assistant", content: [{ type: "tool-call", toolCallId: call.toolCallId, toolName: "task", input: call.input }] },
+      { role: "tool", content: [{ type: "tool-result", toolCallId: call.toolCallId, toolName: "task", output: { type: "text", value: "COMPLETED-ONCE" } }] },
+      { role: "user", content: [{ type: "text", text: "CORRECTION" }] },
+    ] }
+    const failed: any[] = []
+    for await (const part of (await model.doStream(options as any)).stream) failed.push(part)
+    assert.ok(failed.some(part => part.type === "error" && part.error.message.includes("did not acknowledge interruption")))
+    assert.equal(getPendingProxyCalls(sk).length, 1)
+    assert.equal(getActiveProcess(sk)?.pendingProxyCompletions?.size ?? 0, 0)
+    assert.equal(getActiveProcess(sk)?.lineEmitter.listenerCount("line"), 0)
+    writeFileSync(join(fake.cwd, "allow-interrupt"), "yes")
+    const retried: any[] = []
+    for await (const part of (await model.doStream(options as any)).stream) retried.push(part)
+    assert.ok(retried.some(part => part.type === "text-delta" && part.delta.includes("STEERING-APPLIED")))
+    const inputs = readFileSync(fake.eventsPath, "utf8").trim().split("\n").map(line => JSON.parse(line)).filter(event => event.type === "input" && event.input.type === "user")
+    assert.equal(inputs.length, 2)
+    assert.equal(JSON.stringify(inputs[1]).split("COMPLETED-ONCE").length - 1, 1)
+    assert.equal(JSON.stringify(inputs[1]).split("CORRECTION").length - 1, 1)
+    assert.equal(getPendingProxyCalls(sk).length, 0)
+    assert.equal(getActiveProcess(sk)?.pendingProxyCompletions?.size ?? 0, 0)
+  } finally {
+    rejectAllPendingProxyCallsForSession(sk, new Error("test cleanup"))
+    await deleteActiveProcessAndWait(sk)
+    rmSync(fake.cwd, { recursive: true, force: true })
+  }
+})
+
 const TASK_INPUT = {
   description: "Inspect provider flow",
   prompt: "Verify the provider delegates this task through opencode.",

@@ -14,6 +14,25 @@ Use Claude models inside [opencode](https://opencode.ai) by driving the official
 
 ## How this compares
 
+### Rocket fork: live steering
+
+This fork preserves user corrections that arrive with a proxied tool result.
+In headless mode it interrupts the old CLI continuation, waits for its terminal
+result, then sends completed tool results as context followed by the new input.
+The correction reaches the next model request at the tool boundary, rather than
+waiting for the entire response. Text and supported image attachments retain
+their order. An interruption timeout surfaces an error and leaves delivery
+available for retry. The experimental interactive transport does not support
+this mixed-result steering path.
+
+The interrupt's terminal error is not shown as the new assistant answer. Pending
+sibling MCP requests are released; their later OpenCode results arrive as context
+on a fresh turn instead of resuming the interrupted CLI tool calls.
+
+Consumers can pin this repository to a full Git commit. The `prepare` script
+builds `dist/` when installed as a Git dependency; build tooling and Git are
+required at installation time. No npm publication is required.
+
 Three ways to reach Claude from opencode. They differ in who authenticates, who gets billed, whether Anthropic sanctions it, and how much of your machine opencode still governs.
 
 | | opencode's native `anthropic` provider | This plugin | Proxy / token-reuse plugins |
