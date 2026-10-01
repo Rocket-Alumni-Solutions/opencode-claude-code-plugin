@@ -74,10 +74,11 @@ them ran in this directory.
 
 ## Open from you
 
-- 2026-09-30: **release 0.33.0 blocked on commit signing.** `npm version` must make a signed
-  commit, and the 1Password `op-ssh-sign` agent fails non-interactively ("failed to fill whole
-  buffer"). Needs the maintainer to unlock 1Password (or approve unsigned) before releasing
-  #68 and #69. This file's edits are uncommitted for the same reason.
+- 2026-10-01: flaky test, seen once under full-suite load and not in five isolated runs:
+  `test-side-question.ts` "provider /btw uses native control response between normal turns on the
+  same CLI process" got an empty aside at ~5.7 s. Same class as the `test-proxy-task.ts` timing
+  note in AGENTS.md. Not investigated yet.
+
 - 2026-09-30: **new contributor PR #67 (@bangnh1)**, unreviewed: V2 `mcp.servers` config
   normalisation (2.0.18 reads the container as a server named `servers`) and opt-in Code Mode
   `execute` proxying. +479/-44 over 17 files; overlaps #69 in `src/v2-client.ts`, so it needs a
@@ -107,7 +108,7 @@ Nothing parked.
 
 ## Done
 
-- 2026-09-30: **done, merged, not yet released**: two lanes as picked ("opencode 2 status/cancel,
+- 2026-09-30: **done** (v0.33.0, released 2026-10-01 once signing worked again): two lanes as picked ("opencode 2 status/cancel,
   Interactive bugs"). PR #68: the interactive transport synthesizes a headless-shaped `result`
   (`subtype: "success"`, top-level `stop_reason`), so its turns no longer end as errors and the
   stats line shows; the transcript dir uses the cwd's real path (`/tmp` is `/private/tmp`).
