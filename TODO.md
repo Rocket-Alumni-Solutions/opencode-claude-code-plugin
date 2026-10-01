@@ -74,19 +74,16 @@ them ran in this directory.
 
 ## Open from you
 
+- 2026-10-01: found by the btw-flake lane (PR #71, #g181), not fixed: an abort that arrives during
+  `doStream`'s prologue (before the stream exists, e.g. while `detectCliVersion` runs) is dropped,
+  because the abort listener is registered inside `start` and `addEventListener("abort")` on an
+  already-aborted signal never fires. So stopping a turn during a slow prologue does not stop the
+  CLI. Changes abort semantics across the turn path. Fix now, later, or drop?
+
 - 2026-10-01: npm's `next` dist-tag still points at 0.27.0 while `latest` is current, so `@next`
   installs an old version. Removing or moving it is a registry change that needs npm auth
   (publishing is OIDC-only from CI). Remove it, or leave it?
 
-- 2026-10-01: flaky test, seen once under full-suite load and not in five isolated runs:
-  `test-side-question.ts` "provider /btw uses native control response between normal turns on the
-  same CLI process" got an empty aside at ~5.7 s. Same class as the `test-proxy-task.ts` timing
-  note in AGENTS.md. Not investigated yet.
-
-- 2026-10-01: follow-up found while verifying PR #67: on a fresh `opencode run` the first turn can
-  be planned before opencode has connected an MCP server, so the runtime-status overlay drops it,
-  and a reused Claude process never re-bridges once it connects (measured on V2 2.0.16; V1 shares
-  the design; the TUI connects servers before the first prompt). See #g178. Not scheduled.
 
 Questions the maintainer still owes an answer on. Written here the turn they are
 raised, so they survive context compaction; removed when answered, done or dropped.
@@ -111,6 +108,13 @@ Nothing parked.
 
 ## Done
 
+- 2026-10-01: **done** (v0.34.0), the two no-input items ("fix these ... what needs my input last").
+  PR #72: opencode 2's `pending` MCP status no longer disables a server; the first turn waits up to
+  `mcpConnectWaitMs` (3000) for it; a changed server set respawns with `--resume` only at a safe
+  boundary and at most once a minute; an interactive-transport process leak fixed. PR #71: the flaky
+  `/btw` test was a product bug (a `claude --version` probe killed by its 5 s deadline was cached as
+  unknown for the whole process, dropping version-gated flags); now re-probed, capped at two per key
+  at merge. 1,011 tests, both live- or load-verified.
 - 2026-10-01: **done** (v0.33.2): "look at all of it and fix all of it" for the setup skill. PR #70 audited
   SKILL.md against the code: two contradictory process caps (the code's is 16; AGENTS.md also said 8,
   corrected in #g179), a non-existent 30-minute idle default, the opencode 2 settings key
