@@ -74,13 +74,15 @@ them ran in this directory.
 
 ## Open from you
 
-- 2026-09-30: found by the interactive-usage lane (PR #65), pre-existing, not fixed, awaiting a
-  now/later/drop: (1) every interactive-transport turn finishes as an error, because the
-  synthesized `result` uses `subtype: "end_turn"` and a non-`success` subtype is a failure since
-  #g113 (it also suppresses `turnStats`); (2) `ClaudeSession` resolves a `/tmp` cwd to a transcript
-  path the CLI never writes (`/private/tmp` on macOS). Both in `docs/agents-history.md` #g174.
-- 2026-09-30: background-subagents follow-ups (PR #66): `task_status`/`task_cancel` on opencode 2
-  need the V1 client shim to expose `session.messages`/`session.abort`; no doctor section yet.
+- 2026-09-30: **release 0.33.0 blocked on commit signing.** `npm version` must make a signed
+  commit, and the 1Password `op-ssh-sign` agent fails non-interactively ("failed to fill whole
+  buffer"). Needs the maintainer to unlock 1Password (or approve unsigned) before releasing
+  #68 and #69. This file's edits are uncommitted for the same reason.
+- 2026-09-30: **new contributor PR #67 (@bangnh1)**, unreviewed: V2 `mcp.servers` config
+  normalisation (2.0.18 reads the container as a server named `servers`) and opt-in Code Mode
+  `execute` proxying. +479/-44 over 17 files; overlaps #69 in `src/v2-client.ts`, so it needs a
+  rebase; targets opencode 2.0.18 while the sandbox is capped at 2.0.16 by Aikido. Review
+  now or later?
 
 Questions the maintainer still owes an answer on. Written here the turn they are
 raised, so they survive context compaction; removed when answered, done or dropped.
@@ -105,6 +107,13 @@ Nothing parked.
 
 ## Done
 
+- 2026-09-30: **done, merged, not yet released**: two lanes as picked ("opencode 2 status/cancel,
+  Interactive bugs"). PR #68: the interactive transport synthesizes a headless-shaped `result`
+  (`subtype: "success"`, top-level `stop_reason`), so its turns no longer end as errors and the
+  stats line shows; the transcript dir uses the cwd's real path (`/tmp` is `/private/tmp`).
+  PR #69: `task_status` / `task_cancel` work on opencode 2 (shim over `session.context` /
+  `session.interrupt`) and the doctor gets a background-subagents section. 970 tests; both
+  live-verified (Bun interactive run; V2 sandbox 2.0.16).
 - 2026-09-30: **done** (v0.32.0), two implementor lanes as asked ("do 1 background agents in 1 lane
   and 2 small follow up in another"). PR #66: background subagents are opencode's own (`task`
   `background: true`, gated on 1.x by `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`); the plugin
