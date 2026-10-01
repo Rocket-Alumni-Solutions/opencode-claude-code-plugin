@@ -476,11 +476,18 @@ export function getClaudeUserMessage(
     compactionMode?: boolean
     cliToolCallIds?: ReadonlySet<string>
     stripContextReminders?: boolean
+    interruptedContinuation?: boolean
   } = {},
 ): string {
   const compactionMode = opts.compactionMode === true
   const cliToolCallIds = opts.cliToolCallIds
   const content: any[] = []
+  if (opts.interruptedContinuation) {
+    content.push({
+      type: "text",
+      text: "The previous continuation was interrupted to deliver new user input. The tool results below describe actions that already finished; use those results without repeating the actions. Continue with the new instructions that follow.",
+    })
+  }
 
   // The account-failover form is the plugin's own dialog: Claude never issued
   // that call and never saw its answer. The transcript rebuilds stripped it

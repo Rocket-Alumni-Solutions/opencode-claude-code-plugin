@@ -1246,6 +1246,15 @@ export class ClaudeCodeLanguageModel implements LanguageModelV3 {
     const hasMatchedPendingResults = previousPendingProxyMatches.some(
       (m) => m.result !== null,
     )
+    // A tool continuation can also carry input admitted at this step boundary.
+    // Interrupting closes the CLI's tool_use, so results travel as context text.
+    const steeringMessage = !compactionMode && hasMatchedPendingResults && hasNewUserContent(effectivePrompt, false)
+      ? getClaudeUserMessage(effectivePrompt, false, {
+          cliToolCallIds: new Set(),
+          stripContextReminders: this.stripContextRemindersEnabled(),
+          interruptedContinuation: true,
+        })
+      : undefined
 
     // Pre-fetch opencode's MCP runtime status before constructing the
     // ReadableStream so the sync hot-reload check and async setup() see
@@ -1811,12 +1820,20 @@ export class ClaudeCodeLanguageModel implements LanguageModelV3 {
           // fallback rather than a real `result`), stop it before this turn
           // attaches any listeners; otherwise its tail streams into us and its
           // `result` closes us before our own answer arrives. Skipped for
-          // tool-result turns: there the CLI is deliberately parked inside a
-          // proxy MCP call waiting for the result we are about to deliver.
-          if (state.activeProcess && !hasMatchedPendingResults && isTurnInFlight(state.activeProcess)) {
+          // pure tool-result turns: there the CLI is deliberately parked inside
+          // a proxy MCP call. Mixed user input needs a new, interrupted turn.
+          if (steeringMessage && useInteractive) {
+            throw new Error("Live steering during a tool call requires the headless Claude Code transport.")
+          }
+          if (state.activeProcess && (!hasMatchedPendingResults || steeringMessage) && isTurnInFlight(state.activeProcess)) {
+            options.abortSignal?.throwIfAborted()
             log.warn("previous turn still in flight; interrupting it", { sk })
             const idle = await interruptTurn(state.activeProcess)
+            options.abortSignal?.throwIfAborted()
             if (!idle) {
+              if (steeringMessage) {
+                throw new Error("Claude Code did not acknowledge interruption; steering was not sent to a still-running turn.")
+              }
               log.warn("previous turn did not stop in time; this turn may see stale output", { sk })
             }
           }
@@ -2409,6 +2426,21 @@ export class ClaudeCodeLanguageModel implements LanguageModelV3 {
             // Abort grace period — short, since the user already asked to stop.
             startResultFallback(state, 5_000)
           })
+        }
+
+        if (steeringMessage) {
+          for (const { call, result } of previousPendingProxyMatches) {
+            if (!result) continue
+            resolvePendingProxyCallById(call.toolCallId, result)
+            state.activeProcess?.pendingProxyCompletions?.delete(call.toolCallId)
+          }
+          state.unattendedTurnEnded = false
+          state.watchdogMessage = steeringMessage
+          if (state.activeProcess) noteTurnStarted(state.activeProcess)
+          state.proc.stdin!.write(steeringMessage + "\n")
+          log.info("sent steering after interrupting proxy continuation", { sessionKey: sk })
+          armStartWatchdog(state)
+          return
         }
 
         if (hasMatchedPendingResults) {
