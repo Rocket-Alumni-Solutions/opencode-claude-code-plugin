@@ -104,6 +104,18 @@ test("configModelsForProvider registers Fable and Mythos 5.1 metadata", () => {
   }
 })
 
+test("configModelsForProvider registers Fable 5.2 metadata", () => {
+  const model = configModelsForProvider({}, "claude-code")["claude-fable-5-2"] as Record<string, unknown>
+  assert.ok(model, "claude-fable-5-2 should be present")
+  assert.equal(model.name, "Claude Fable 5.2 (8×)")
+  assert.equal(model.family, "fable")
+  assert.equal(model.release_date, "2026-11-09")
+  assert.equal(model.reasoning, true)
+  assert.deepEqual(model.limit, { context: 1_000_000, output: 128_000 })
+  assert.deepEqual(model.cost, { input: 8, output: 40, cache_read: 0.2, cache_write: 10 })
+  assert.ok("max" in (model.variants as Record<string, unknown>), "must carry the reasoning variants")
+})
+
 test("configModelsForProvider registers Sonnet 5 and Opus 5 metadata", () => {
   const models = configModelsForProvider({}, "claude-code")
 
@@ -277,6 +289,7 @@ test("configModelsForProvider reports the published context and output limits", 
     "claude-opus-5-5",
     "claude-fable-5",
     "claude-fable-5-1",
+    "claude-fable-5-2",
     "claude-mythos-5",
     "claude-mythos-5-1",
   ]) {

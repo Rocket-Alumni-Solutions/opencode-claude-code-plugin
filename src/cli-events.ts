@@ -807,6 +807,8 @@ export const UNRECOGNIZED_MODEL_STDERR_MARKER = "[claude-code:unrecognized_model
 const MODEL_CLI_FLOORS: Record<string, string> = {
   // "Added Claude Sonnet 5.5 (`claude-sonnet-5-5`)" (CHANGELOG, 2.1.284).
   "claude-sonnet-5-5": "2.1.284",
+  // "Added Claude Fable 5.2 (`claude-fable-5-2`)" (CHANGELOG, 2.1.321).
+  "claude-fable-5-2": "2.1.321",
 }
 
 /**
